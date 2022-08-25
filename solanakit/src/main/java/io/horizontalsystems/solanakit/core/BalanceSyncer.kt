@@ -5,18 +5,19 @@ import com.solana.api.getBlockHeight
 import com.solana.core.PublicKey
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.api.ApiRpcSyncer
+import io.horizontalsystems.solanakit.api.IRpcSyncerListener
 import io.horizontalsystems.solanakit.api.SyncerState
-import io.reactivex.schedulers.Schedulers
 
 interface IBalanceListener {
     fun onUpdateLastBlockHeight(lastBlockHeight: Long)
     fun onUpdateSyncState(syncState: SolanaKit.SyncState)
     fun onUpdateBalance(balance: Long)
 }
+
 class BalanceSyncer(
     private val publicKey: PublicKey,
     private val syncer: ApiRpcSyncer
-) {
+): IRpcSyncerListener {
 
     var listener: IBalanceListener? = null
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
@@ -27,6 +28,13 @@ class BalanceSyncer(
             }
         }
 
+    val lastBlockHeight: Long? = null
+    val balance: Long? = null
+
+    init {
+        syncer.listener = this
+    }
+
     fun start() {
         syncState = SolanaKit.SyncState.Syncing()
         syncer.start()
@@ -35,7 +43,7 @@ class BalanceSyncer(
     fun refresh() {
         when (syncer.state) {
             SyncerState.Ready -> {
-                syncAccountState()
+                syncBalance()
                 syncLastBlockHeight()
             }
             is SyncerState.NotReady -> {
@@ -48,7 +56,24 @@ class BalanceSyncer(
         syncer.stop()
     }
 
-    fun syncAccountState() {
+    override fun didUpdateSyncerState(state: SyncerState) {
+        when (state) {
+            SyncerState.Ready -> {
+                syncState = SolanaKit.SyncState.Syncing()
+                syncBalance()
+                syncLastBlockHeight()
+            }
+            is SyncerState.NotReady -> {
+                syncState = SolanaKit.SyncState.NotSynced(state.error)
+            }
+        }
+    }
+
+    override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
+        onUpdateLastBlockHeight(lastBlockHeight)
+    }
+
+    fun syncBalance() {
         syncer.api.getBalance(publicKey) {
             it.onSuccess { balance ->
                 onUpdateBalance(balance)

@@ -11,22 +11,22 @@ import io.horizontalsystems.solanakit.sample.Configuration
 class BalanceViewModel : ViewModel() {
 
     private val _text = MutableLiveData<String>().apply {
-        value = "This is home Fragment"
+        value = "This is Balance Fragment"
     }
     val text: LiveData<String> = _text
 
-//    private lateinit var solanaKit: SolanaKit
+    private lateinit var solanaKit: SolanaKit
 
     fun init() {
-//        solanaKit = createKit()
+        solanaKit = createKit()
     }
 
     private fun createKit(): SolanaKit {
         val words = Configuration.defaultsWords.split(" ")
-        val seed = Signer.publicKey(words, "")
+        val address = Signer.address(words, "")
 
         return SolanaKit.getInstance(
-            App.instance, seed,
+            App.instance, address,
             Configuration.rpcSource, Configuration.walletId
         )
     }

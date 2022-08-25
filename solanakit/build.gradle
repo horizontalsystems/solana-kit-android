@@ -7,7 +7,7 @@ android {
     compileSdk 32
 
     defaultConfig {
-        minSdk 27
+        minSdk 26
         targetSdk 32
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -36,7 +36,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.5.0'
     implementation 'com.google.android.material:material:1.6.1'
 
-    api 'com.github.metaplex-foundation.SolanaKT:solana:1eaf5c6'
+    implementation 'com.github.metaplex-foundation.SolanaKT:solana:1eaf5c6'
     implementation 'com.github.metaplex-foundation.SolanaKT:rxsolana:1eaf5c6'
 
     implementation 'com.github.horizontalsystems:hd-wallet-kit-android:f64354d'

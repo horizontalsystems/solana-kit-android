@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId 'io.horizontalsystems.solanakit'
-        minSdk 27
+        minSdk 26
         targetSdk 32
         versionCode 1
         versionName "1.0"
@@ -37,15 +37,6 @@ android {
     configurations.all { c ->
         c.resolutionStrategy.dependencySubstitution {
             substitute module('org.bouncycastle:bcprov-jdk15to18:1.68') using module('org.bouncycastle:bcprov-jdk15on:1.65')
-
-//            // Use a rule to change the dependency module while leaving group + version intact
-//            all { DependencySubstitution dependency ->
-//                if (dependency.requested instanceof ModuleComponentSelector && dependency.requested.module == 'bcprov-jdk15to18') {
-//                    println 'Replaced with org.bouncycastle:bcprov-jdk15on:1.65'
-//
-//                    dependency.useTarget 'org.bouncycastle:bcprov-jdk15on:1.65'
-//                }
-//            }
         }
     }
 

@@ -1,41 +1,124 @@
 package io.horizontalsystems.solanakit
 
 import android.app.Application
+import android.content.Context
 import com.solana.api.Api
 import com.solana.core.PublicKey
-import com.solana.networking.NetworkingRouter
+import com.solana.networking.Network
 import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.api.ApiRpcSyncer
+import io.horizontalsystems.solanakit.core.BalanceSyncer
+import io.horizontalsystems.solanakit.core.IBalanceListener
 import io.horizontalsystems.solanakit.models.RpcSource
+import io.horizontalsystems.solanakit.models.SolanaKitState
 import io.horizontalsystems.solanakit.network.ConnectionManager
+import io.reactivex.BackpressureStrategy
+import io.reactivex.Flowable
+import io.reactivex.subjects.PublishSubject
 import java.util.*
 
-
 class SolanaKit(
-    private val connectionManager: ConnectionManager,
-) {
+        private val balanceSyncer: BalanceSyncer,
+        private val connectionManager: ConnectionManager,
+        rpcSource: RpcSource,
+        private val address: String,
+) : IBalanceListener {
 
+    private var state = SolanaKitState()
     private var started = false
 
+    private val lastBlockHeightSubject = PublishSubject.create<Long>()
+    private val syncStateSubject = PublishSubject.create<SyncState>()
+    private val balanceSubject = PublishSubject.create<Long>()
+
+    var isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
+
+    init {
+        state.lastBlockHeight = balanceSyncer.lastBlockHeight
+        state.balance = balanceSyncer.balance
+        balanceSyncer.listener = this
+    }
+
+    val lastBlockHeight: Long?
+        get() = state.lastBlockHeight
+
+    val balance: Long?
+        get() = state.balance
+
+    val syncState: SyncState
+        get() = balanceSyncer.syncState
+
+//    val transactionsSyncState: SyncState
+//        get() = transactionSyncManager.syncState
+
+    val receiveAddress: String
+        get() = address
+
+    val lastBlockHeightFlowable: Flowable<Long>
+        get() = lastBlockHeightSubject.toFlowable(BackpressureStrategy.BUFFER)
+
+    val syncStateFlowable: Flowable<SyncState>
+        get() = syncStateSubject.toFlowable(BackpressureStrategy.BUFFER)
+
+//    val transactionsSyncStateFlowable: Flowable<SyncState>
+//        get() = transactionSyncManager.syncStateAsync
+
+    val balanceFlowable: Flowable<Long>
+        get() = balanceSubject.toFlowable(BackpressureStrategy.BUFFER)
+
+//    val allTransactionsFlowable: Flowable<Pair<List<FullTransaction>, Boolean>>
+//        get() = transactionManager.fullTransactionsAsync
 
     fun start() {
         if (started) return
         started = true
 
-//        blockchain.start()
+        balanceSyncer.start()
 //        transactionSyncManager.sync()
     }
 
     fun stop() {
         started = false
-//        blockchain.stop()
-//        state.clear()
+
+        balanceSyncer.stop()
+        state.clear()
         connectionManager.stop()
     }
 
     fun refresh() {
-//        blockchain.refresh()
+        balanceSyncer.refresh()
 //        transactionSyncManager.sync()
+    }
+
+    fun debugInfo(): String {
+        val lines = mutableListOf<String>()
+        lines.add("ADDRESS: $address")
+        return lines.joinToString { "\n" }
+    }
+
+    fun statusInfo(): Map<String, Any> {
+        val statusInfo = LinkedHashMap<String, Any>()
+
+        return statusInfo
+    }
+
+    override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
+        if (state.lastBlockHeight == lastBlockHeight) return
+
+        state.lastBlockHeight = lastBlockHeight
+        lastBlockHeightSubject.onNext(lastBlockHeight)
+//        transactionSyncManager.sync()
+    }
+
+    override fun onUpdateSyncState(syncState: SyncState) {
+        syncStateSubject.onNext(syncState)
+    }
+
+    override fun onUpdateBalance(balance: Long) {
+        if (state.balance == balance) return
+
+        state.balance = balance
+        balanceSubject.onNext(balance)
     }
 
     sealed class SyncState {
@@ -80,39 +163,27 @@ class SolanaKit(
 
         fun getInstance(
             application: Application,
-            publicKey: PublicKey,
+            address: String,
             rpcSource: RpcSource,
             walletId: String
         ): SolanaKit {
             val router = OkHttpNetworkingRouter(rpcSource.endpoint)
-            val api: Api = Api(router)
+            val api = Api(router)
             val connectionManager = ConnectionManager(application)
 
             val apiRpcSyncer = ApiRpcSyncer(api, connectionManager, 15)
+            val publicKey = PublicKey(address)
 
-            val kit = SolanaKit(connectionManager)
+            val balanceSyncer = BalanceSyncer(publicKey, apiRpcSyncer)
+
+            val kit = SolanaKit(balanceSyncer, connectionManager, rpcSource, address)
 
             return kit
         }
-//
-//        fun getInstance(
-//            application: Application,
-//            words: List<String>,
-//            passphrase: String = "",
-//            providerEndpoint: RPCEndpoint,
-//            walletId: String
-//        ): SolanaKit {
-//            val network = NetworkingRouter(providerEndpoint)
-//            val rpcProvider = Solana(network)
-//            val connectionManager = ConnectionManager(application)
-//
-//            val sender = Account.fromMnemonic(words, passphrase)
-//            val apiRpcSyncer = ApiRpcSyncer(rpcProvider, connectionManager, 15)
-//
-//            val kit = SolanaKit(connectionManager)
-//
-//            return kit
-//        }
+
+        fun clear(context: Context, rpcSource: RpcSource, walletId: String) {
+
+        }
 
     }
 
