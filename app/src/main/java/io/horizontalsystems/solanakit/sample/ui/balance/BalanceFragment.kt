@@ -29,8 +29,13 @@ class BalanceFragment : Fragment() {
         val root: View = binding.root
 
         val textView: TextView = binding.textHome
-        balanceViewModel.text.observe(viewLifecycleOwner) {
+        balanceViewModel.receiveAddress.observe(viewLifecycleOwner) {
             textView.text = it
+        }
+
+        val balanceView: TextView = binding.balanceText
+        balanceViewModel.balance.observe(viewLifecycleOwner) {
+            balanceView.text = it
         }
         return root
     }

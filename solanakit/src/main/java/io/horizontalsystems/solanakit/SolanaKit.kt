@@ -7,21 +7,25 @@ import com.solana.core.PublicKey
 import com.solana.networking.Network
 import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.api.ApiRpcSyncer
-import io.horizontalsystems.solanakit.core.BalanceSyncer
+import io.horizontalsystems.solanakit.core.BalanceManager
 import io.horizontalsystems.solanakit.core.IBalanceListener
+import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
+import io.horizontalsystems.solanakit.database.MainStorage
 import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.models.SolanaKitState
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
 import io.reactivex.subjects.PublishSubject
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import java.util.*
 
 class SolanaKit(
-        private val balanceSyncer: BalanceSyncer,
-        private val connectionManager: ConnectionManager,
-        rpcSource: RpcSource,
-        private val address: String,
+    private val balanceSyncer: BalanceManager,
+    private val connectionManager: ConnectionManager,
+    rpcSource: RpcSource,
+    private val address: String,
 ) : IBalanceListener {
 
     private var state = SolanaKitState()
@@ -36,6 +40,7 @@ class SolanaKit(
     init {
         state.lastBlockHeight = balanceSyncer.lastBlockHeight
         state.balance = balanceSyncer.balance
+
         balanceSyncer.listener = this
     }
 
@@ -51,8 +56,7 @@ class SolanaKit(
 //    val transactionsSyncState: SyncState
 //        get() = transactionSyncManager.syncState
 
-    val receiveAddress: String
-        get() = address
+    val receiveAddress = address
 
     val lastBlockHeightFlowable: Flowable<Long>
         get() = lastBlockHeightSubject.toFlowable(BackpressureStrategy.BUFFER)
@@ -168,21 +172,36 @@ class SolanaKit(
             walletId: String
         ): SolanaKit {
             val router = OkHttpNetworkingRouter(rpcSource.endpoint)
-            val api = Api(router)
             val connectionManager = ConnectionManager(application)
 
-            val apiRpcSyncer = ApiRpcSyncer(api, connectionManager, 15)
+            val apiRpcSyncer = ApiRpcSyncer(Api(router), connectionManager, 15)
             val publicKey = PublicKey(address)
 
-            val balanceSyncer = BalanceSyncer(publicKey, apiRpcSyncer)
+            val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
+            val mainStorage = MainStorage(mainDatabase)
+
+            val balanceSyncer = BalanceManager(publicKey, apiRpcSyncer, mainStorage)
 
             val kit = SolanaKit(balanceSyncer, connectionManager, rpcSource, address)
 
             return kit
         }
 
-        fun clear(context: Context, rpcSource: RpcSource, walletId: String) {
+        fun clear(context: Context, walletId: String) {
+            SolanaDatabaseManager.clear(context, walletId)
+        }
 
+        private fun loggingHttpClient(): OkHttpClient {
+            val consoleLogger = object : HttpLoggingInterceptor.Logger {
+                override fun log(message: String) {
+                    println(message)
+                }
+            }
+
+            val logging = HttpLoggingInterceptor(consoleLogger)
+            logging.level = HttpLoggingInterceptor.Level.BODY
+
+            return OkHttpClient.Builder().addInterceptor(logging).build()
         }
 
     }

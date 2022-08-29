@@ -40,7 +40,7 @@ class Signer {
 
         fun privateKey(seed: ByteArray): ByteArray {
             val solanaBip44 = SolanaBip44()
-            val privateKey = solanaBip44.getPrivateKeyFromSeed(seed, DerivableType.BIP44)
+            val privateKey = solanaBip44.getPrivateKeyFromSeed(seed, DerivableType.BIP44CHANGE)
             val keyPair = TweetNaclFast.Signature.keyPair_fromSeed(privateKey)
             return keyPair.secretKey
         }

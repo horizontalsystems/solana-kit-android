@@ -7,6 +7,7 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.api.ApiRpcSyncer
 import io.horizontalsystems.solanakit.api.IRpcSyncerListener
 import io.horizontalsystems.solanakit.api.SyncerState
+import io.horizontalsystems.solanakit.database.MainStorage
 
 interface IBalanceListener {
     fun onUpdateLastBlockHeight(lastBlockHeight: Long)
@@ -14,9 +15,10 @@ interface IBalanceListener {
     fun onUpdateBalance(balance: Long)
 }
 
-class BalanceSyncer(
+class BalanceManager(
     private val publicKey: PublicKey,
-    private val syncer: ApiRpcSyncer
+    private val syncer: ApiRpcSyncer,
+    private val storage: MainStorage
 ): IRpcSyncerListener {
 
     var listener: IBalanceListener? = null
@@ -28,8 +30,11 @@ class BalanceSyncer(
             }
         }
 
-    val lastBlockHeight: Long? = null
-    val balance: Long? = null
+    val lastBlockHeight: Long?
+        get() = storage.getLastBlockHeight()
+
+    val balance: Long?
+        get() = storage.getBalance()
 
     init {
         syncer.listener = this
@@ -99,12 +104,12 @@ class BalanceSyncer(
     }
 
     private fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
-//        storage.saveLastBlockHeight(lastBlockHeight)
+        storage.saveLastBlockHeight(lastBlockHeight)
         listener?.onUpdateLastBlockHeight(lastBlockHeight)
     }
 
     private fun onUpdateBalance(balance: Long) {
-//        storage.saveAccountState(balance)
+        storage.saveBalance(balance)
         listener?.onUpdateBalance(balance)
     }
 

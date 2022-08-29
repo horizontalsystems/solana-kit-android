@@ -5,8 +5,6 @@ import com.solana.networking.RPCEndpoint
 import java.net.URL
 
 sealed class RpcSource(var endpoint: RPCEndpoint) {
-    object MainnetBeta: RpcSource(RPCEndpoint.mainnetBetaSolana)
-    object MainnetSerum: RpcSource(RPCEndpoint.mainnetBetaSerum)
-    object Testnet: RpcSource(RPCEndpoint.testnetSolana)
+    object TritonOne: RpcSource(RPCEndpoint.mainnetBetaSolana)
     class Custom(httpURL: URL, websocketURL: URL): RpcSource(RPCEndpoint.custom(httpURL, websocketURL, Network.mainnetBeta))
 }
