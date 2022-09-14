@@ -1,4 +1,4 @@
-package io.horizontalsystems.solanakit.database.dao
+package io.horizontalsystems.solanakit.database.main.dao
 
 import androidx.room.Dao
 import androidx.room.Insert

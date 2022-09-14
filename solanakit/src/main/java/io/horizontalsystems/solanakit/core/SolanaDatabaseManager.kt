@@ -1,7 +1,8 @@
 package io.horizontalsystems.solanakit.core
 
 import android.content.Context
-import io.horizontalsystems.solanakit.database.MainDatabase
+import io.horizontalsystems.solanakit.database.main.MainDatabase
+import io.horizontalsystems.solanakit.database.transaction.TransactionDatabase
 
 internal object SolanaDatabaseManager {
 
@@ -9,10 +10,9 @@ internal object SolanaDatabaseManager {
         return MainDatabase.getInstance(context, getDbNameMain(walletId))
     }
 
-//    fun getTransactionDatabase(context: Context, walletId: String): TransactionDatabase {
-//        return TransactionDatabase.getInstance(context, getDbNameTransactions(walletId))
-//    }
-//
+    fun getTransactionDatabase(context: Context, walletId: String): TransactionDatabase {
+        return TransactionDatabase.getInstance(context, getDbNameTransactions(walletId))
+    }
 
     fun clear(context: Context, walletId: String) {
         synchronized(this) {

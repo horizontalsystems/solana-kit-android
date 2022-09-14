@@ -1,27 +1,22 @@
 package io.horizontalsystems.solanakit.core
 
+import com.solana.api.Api
 import com.solana.api.getBalance
-import com.solana.api.getBlockHeight
 import com.solana.core.PublicKey
 import io.horizontalsystems.solanakit.SolanaKit
-import io.horizontalsystems.solanakit.api.ApiRpcSyncer
-import io.horizontalsystems.solanakit.api.IRpcSyncerListener
-import io.horizontalsystems.solanakit.api.SyncerState
-import io.horizontalsystems.solanakit.database.MainStorage
+import io.horizontalsystems.solanakit.database.main.MainStorage
 
 interface IBalanceListener {
-    fun onUpdateLastBlockHeight(lastBlockHeight: Long)
-    fun onUpdateSyncState(syncState: SolanaKit.SyncState)
+    fun onUpdateSyncState(value: SolanaKit.SyncState)
     fun onUpdateBalance(balance: Long)
 }
 
 class BalanceManager(
     private val publicKey: PublicKey,
-    private val syncer: ApiRpcSyncer,
+    private val rpcClient: Api,
     private val storage: MainStorage
-): IRpcSyncerListener {
+) {
 
-    var listener: IBalanceListener? = null
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
         private set(value) {
             if (value != field) {
@@ -30,87 +25,41 @@ class BalanceManager(
             }
         }
 
-    val lastBlockHeight: Long?
-        get() = storage.getLastBlockHeight()
+    var listener: IBalanceListener? = null
 
-    val balance: Long?
-        get() = storage.getBalance()
-
-    init {
-        syncer.listener = this
-    }
+    var balance: Long? = storage.getBalance()
+        private set
 
     fun start() {
         syncState = SolanaKit.SyncState.Syncing()
-        syncer.start()
     }
 
-    fun refresh() {
-        when (syncer.state) {
-            SyncerState.Ready -> {
-                syncBalance()
-                syncLastBlockHeight()
-            }
-            is SyncerState.NotReady -> {
-                start()
-            }
-        }
+    fun stop(error: Throwable? = null) {
+        syncState = SolanaKit.SyncState.NotSynced(error ?: SolanaKit.SyncError.NotStarted())
     }
 
-    fun stop() {
-        syncer.stop()
-    }
+    fun sync() {
+        syncState = SolanaKit.SyncState.Syncing()
 
-    override fun didUpdateSyncerState(state: SyncerState) {
-        when (state) {
-            SyncerState.Ready -> {
-                syncState = SolanaKit.SyncState.Syncing()
-                syncBalance()
-                syncLastBlockHeight()
-            }
-            is SyncerState.NotReady -> {
-                syncState = SolanaKit.SyncState.NotSynced(state.error)
-            }
-        }
-    }
-
-    override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
-        onUpdateLastBlockHeight(lastBlockHeight)
-    }
-
-    fun syncBalance() {
-        syncer.api.getBalance(publicKey) {
-            it.onSuccess { balance ->
-                onUpdateBalance(balance)
-                syncState = SolanaKit.SyncState.Synced()
+        rpcClient.getBalance(publicKey) { result ->
+            result.onSuccess { balance ->
+                handleBalance(balance)
             }
 
-            it.onFailure {
+            result.onFailure {
                 syncState = SolanaKit.SyncState.NotSynced(it)
             }
         }
     }
 
-    private fun syncLastBlockHeight() {
-        syncer.api.getBlockHeight {
-            it.onSuccess { lastBlockNumber ->
-                onUpdateLastBlockHeight(lastBlockNumber)
-            }
-
-            it.onFailure {
-                syncState = SolanaKit.SyncState.NotSynced(it)
-            }
+    private fun handleBalance(balance: Long) {
+        if (this.balance != balance) {
+            this.balance = balance
+            storage.saveBalance(balance)
+            listener?.onUpdateBalance(balance)
         }
-    }
 
-    private fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
-        storage.saveLastBlockHeight(lastBlockHeight)
-        listener?.onUpdateLastBlockHeight(lastBlockHeight)
-    }
-
-    private fun onUpdateBalance(balance: Long) {
-        storage.saveBalance(balance)
-        listener?.onUpdateBalance(balance)
+        syncState = SolanaKit.SyncState.Synced()
     }
 
 }

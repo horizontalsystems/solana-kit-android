@@ -1,7 +1,8 @@
-package io.horizontalsystems.solanakit.database
+package io.horizontalsystems.solanakit.database.main
 
 import io.horizontalsystems.solanakit.models.BalanceEntity
 import io.horizontalsystems.solanakit.models.LastBlockHeightEntity
+import io.horizontalsystems.solanakit.models.TokenAccount
 
 class MainStorage(
     private val database: MainDatabase
@@ -22,5 +23,12 @@ class MainStorage(
     fun getBalance(): Long? {
         return database.balanceDao().getBalance()?.lamports
     }
+
+    fun saveTokenAccounts(tokenAccounts: List<TokenAccount>) {
+        database.tokenAccountsDao().insert(tokenAccounts)
+    }
+
+    fun getTokenAccounts(): List<TokenAccount> =
+        database.tokenAccountsDao().getAll()
 
 }

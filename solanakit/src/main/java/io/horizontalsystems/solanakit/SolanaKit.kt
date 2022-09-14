@@ -6,57 +6,59 @@ import com.solana.api.Api
 import com.solana.core.PublicKey
 import com.solana.networking.Network
 import com.solana.networking.OkHttpNetworkingRouter
-import io.horizontalsystems.solanakit.api.ApiRpcSyncer
-import io.horizontalsystems.solanakit.core.BalanceManager
-import io.horizontalsystems.solanakit.core.IBalanceListener
+import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
-import io.horizontalsystems.solanakit.database.MainStorage
+import io.horizontalsystems.solanakit.noderpc.ApiSyncer
+import io.horizontalsystems.solanakit.transactions.TransactionSyncer
+import io.horizontalsystems.solanakit.database.main.MainStorage
+import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
+import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
-import io.horizontalsystems.solanakit.models.SolanaKitState
+import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.network.ConnectionManager
+import io.horizontalsystems.solanakit.transactions.SolscanClient
+import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
+import io.reactivex.Single
 import io.reactivex.subjects.PublishSubject
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.*
 
 class SolanaKit(
-    private val balanceSyncer: BalanceManager,
-    private val connectionManager: ConnectionManager,
+    private val apiSyncer: ApiSyncer,
+    private val balanceManager: BalanceManager,
+    private val tokenAccountManager: TokenAccountManager,
+    private val transactionManager: TransactionManager,
+    private val syncManager: SyncManager,
     rpcSource: RpcSource,
     private val address: String,
-) : IBalanceListener {
-
-    private var state = SolanaKitState()
-    private var started = false
+) : ISyncListener {
 
     private val lastBlockHeightSubject = PublishSubject.create<Long>()
     private val syncStateSubject = PublishSubject.create<SyncState>()
+    private val tokenSyncStateSubject = PublishSubject.create<SyncState>()
     private val balanceSubject = PublishSubject.create<Long>()
 
     var isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
 
-    init {
-        state.lastBlockHeight = balanceSyncer.lastBlockHeight
-        state.balance = balanceSyncer.balance
-
-        balanceSyncer.listener = this
-    }
-
-    val lastBlockHeight: Long?
-        get() = state.lastBlockHeight
-
-    val balance: Long?
-        get() = state.balance
-
     val syncState: SyncState
-        get() = balanceSyncer.syncState
+        get() = syncManager.balanceSyncState
 
-//    val transactionsSyncState: SyncState
-//        get() = transactionSyncManager.syncState
+    val tokenBalanceSyncState: SyncState
+        get() = syncManager.tokenBalanceSyncState
+
+    val transactionsSyncState: SyncState
+        get() = syncManager.transactionsSyncState
 
     val receiveAddress = address
+
+    val lastBlockHeight: Long?
+        get() = apiSyncer.lastBlockHeight
+
+    val balance: Long?
+        get() = balanceManager.balance
 
     val lastBlockHeightFlowable: Flowable<Long>
         get() = lastBlockHeightSubject.toFlowable(BackpressureStrategy.BUFFER)
@@ -74,24 +76,15 @@ class SolanaKit(
 //        get() = transactionManager.fullTransactionsAsync
 
     fun start() {
-        if (started) return
-        started = true
-
-        balanceSyncer.start()
-//        transactionSyncManager.sync()
+        syncManager.start()
     }
 
     fun stop() {
-        started = false
-
-        balanceSyncer.stop()
-        state.clear()
-        connectionManager.stop()
+        syncManager.stop()
     }
 
     fun refresh() {
-        balanceSyncer.refresh()
-//        transactionSyncManager.sync()
+        syncManager.refresh()
     }
 
     fun debugInfo(): String {
@@ -107,22 +100,39 @@ class SolanaKit(
     }
 
     override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
-        if (state.lastBlockHeight == lastBlockHeight) return
-
-        state.lastBlockHeight = lastBlockHeight
         lastBlockHeightSubject.onNext(lastBlockHeight)
-//        transactionSyncManager.sync()
     }
 
     override fun onUpdateSyncState(syncState: SyncState) {
         syncStateSubject.onNext(syncState)
     }
 
-    override fun onUpdateBalance(balance: Long) {
-        if (state.balance == balance) return
+    override fun onUpdateTokenSyncState(syncState: SyncState) {
+        tokenSyncStateSubject.onNext(syncState)
+    }
 
-        state.balance = balance
-        balanceSubject.onNext(balance)
+    override fun onUpdateTransactionSyncState(syncState: SyncState) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onUpdateTransactions(transactions: List<FullTransaction>) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onUpdateBalance(balance: Long) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {
+        TODO("Not yet implemented")
+    }
+
+    fun getFullTransactionsAsync(onlySolTransfers: Boolean = false, incoming: Boolean? = null, fromHash: ByteArray? = null, limit: Int? = null): Single<List<FullTransaction>> {
+        return transactionManager.getFullTransactionAsync(onlySolTransfers, incoming, fromHash, limit)
+    }
+
+    fun getFullTransactionsAsync(splTokenAddress: String, incoming: Boolean? = null, fromHash: ByteArray? = null, limit: Int? = null): Single<List<FullTransaction>> {
+        TODO("Not yet implemented")
     }
 
     sealed class SyncState {
@@ -174,17 +184,25 @@ class SolanaKit(
             val router = OkHttpNetworkingRouter(rpcSource.endpoint)
             val connectionManager = ConnectionManager(application)
 
-            val apiRpcSyncer = ApiRpcSyncer(Api(router), connectionManager, 15)
-            val publicKey = PublicKey(address)
-
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
             val mainStorage = MainStorage(mainDatabase)
 
-            val balanceSyncer = BalanceManager(publicKey, apiRpcSyncer, mainStorage)
+            val rpcApiClient = Api(router)
+            val apiSyncer = ApiSyncer(rpcApiClient, 15, connectionManager, mainStorage)
+            val publicKey = PublicKey(address)
 
-            val kit = SolanaKit(balanceSyncer, connectionManager, rpcSource, address)
+            val balanceManager = BalanceManager(publicKey, rpcApiClient, mainStorage)
+            val tokenAccountManager = TokenAccountManager(rpcApiClient, mainStorage)
 
-            return kit
+            val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
+            val transactionStorage = TransactionStorage(transactionDatabase)
+            val solscanClient = SolscanClient(OkHttpClient())
+            val transactionManager = TransactionManager(transactionStorage)
+            val transactionSyncer = TransactionSyncer(publicKey, rpcApiClient, solscanClient, transactionStorage)
+
+            val syncManager = SyncManager(apiSyncer, balanceManager, transactionSyncer, tokenAccountManager)
+
+            return SolanaKit(apiSyncer, balanceManager, tokenAccountManager, transactionManager, syncManager, rpcSource, address)
         }
 
         fun clear(context: Context, walletId: String) {
