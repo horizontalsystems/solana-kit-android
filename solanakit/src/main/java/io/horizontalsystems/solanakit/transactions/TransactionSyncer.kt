@@ -9,6 +9,9 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.*
 import io.horizontalsystems.solanakit.noderpc.endpoints.getSignaturesForAddress
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 interface ITransactionListener {
     fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState)
@@ -32,25 +35,32 @@ class TransactionSyncer(
 
     var listener: ITransactionListener? = null
 
-    fun sync() {
+    suspend fun sync() {
         if (syncState is SolanaKit.SyncState.Syncing) return
 
         syncState = SolanaKit.SyncState.Syncing()
 
         val lastTransactionHash = storage.lastTransaction()?.hash
-        val fromTime = storage.get(solscanClient.sourceName)?.blockTime
+        val fromTime = storage.getSyncedBlockTime(solscanClient.sourceName)?.blockTime
 
-        getTransactionsFromRpcNode(lastTransactionHash) { rpcNodeTxs ->
-            getTransactionsFromSolscan(fromTime) { solscanTxs ->
-                handle(rpcNodeTxs, solscanTxs)
-                syncState = SolanaKit.SyncState.Synced()
+        try {
+            val rpcNodeTxs = getTransactionsFromRpcNode(lastTransactionHash)
+            val solscanTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
+            handle(rpcNodeTxs, solscanTxs)
+
+            if (solscanTxs.isNotEmpty()) {
+                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanTxs.map { it.blockTime }.sorted().last()))
             }
+
+            syncState = SolanaKit.SyncState.Synced()
+        } catch (exception: Throwable) {
+            syncState = SolanaKit.SyncState.NotSynced(exception)
         }
     }
 
     // TODO: this method must retrieve recursively
-    fun getTransactionsFromRpcNode(lastTransactionHash: String?, onComplete: (List<Transaction>) -> Unit) {
-        rpcClient.getSignaturesForAddress(publicKey, before = lastTransactionHash) { result ->
+    suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<Transaction>> { continuation ->
+        rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash) { result ->
             result.onSuccess { signatureObjects ->
                 val transactions = signatureObjects.mapNotNull { signatureObject ->
                     signatureObject.signature?.let { signature ->
@@ -60,34 +70,34 @@ class TransactionSyncer(
                     }
                 }
 
-                onComplete.invoke(transactions)
+                continuation.resume(transactions)
             }
 
             result.onFailure { exception ->
-                syncState = SolanaKit.SyncState.NotSynced(exception)
+                continuation.resumeWithException(exception)
             }
         }
     }
 
-    private fun getTransactionsFromSolscan(fromTime: Long?, onComplete: (List<SolscanExportedTransaction>) -> Unit) {
+    private suspend fun getTransactionsFromSolscan(fromTime: Long?) = suspendCoroutine<List<SolscanExportedTransaction>> { continuation ->
         solscanClient.transactions(publicKey.toBase58(), fromTime) { result ->
             result.onSuccess { solscanTxs ->
-                onComplete.invoke(solscanTxs)
+                continuation.resume(solscanTxs)
             }
 
             result.onFailure {
-                syncState = SolanaKit.SyncState.NotSynced(it)
+                continuation.resumeWithException(it)
             }
         }
     }
 
-    private fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>) {
+    private suspend fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>) {
         val solTransfers = solscanTxs
             .filter { it.type == "SolTransfer" }
             .map { solscanTx ->
                 Transaction(
                     solscanTx.hash,
-                    solscanTx.blockTime.toLong(),
+                    solscanTx.blockTime,
                     solscanTx.fee.toBigDecimal(),
                     solscanTx.solTransferSource,
                     solscanTx.solTransferDestination,
@@ -95,80 +105,75 @@ class TransactionSyncer(
                 )
             }
 
-        if (solTransfers.isNotEmpty()) {
-            storage.updateSolTransferTransactions(solTransfers)
-        }
-
         val tokenTransferTransactions = solscanTxs.filter { it.type == "TokenChange" }
-        if (tokenTransferTransactions.isEmpty()) return
         val mintAddresses = tokenTransferTransactions.mapNotNull { it.mintAccountAddress }.toSet().toList()
 
-        getMintAccounts(mintAddresses) { mintAccounts ->
-            val tokenAccounts = mutableListOf<TokenAccount>()
+        val mintAccounts = getMintAccounts(mintAddresses)
+        val tokenAccounts = mutableListOf<TokenAccount>()
 
-            if (mintAccounts.isNotEmpty()) {
-                storage.addMintAccounts(mintAccounts.values.toList())
-            }
+        if (mintAccounts.isNotEmpty()) {
+            storage.addMintAccounts(mintAccounts.values.toList())
+        }
 
-            val splTransferTransactions = tokenTransferTransactions
-                .groupBy { it.hash }
-                .map { entry ->
-                    val firstTransfer = entry.value.first()
-                    val transaction = Transaction(
-                        entry.key,
-                        firstTransfer.blockTime.toLong(),
-                        firstTransfer.fee.toBigDecimal()
-                    )
+        val splTransferTransactions = tokenTransferTransactions
+            .groupBy { it.hash }
+            .map { entry ->
+                val firstTransfer = entry.value.first()
+                val transaction = Transaction(
+                    entry.key,
+                    firstTransfer.blockTime,
+                    firstTransfer.fee.toBigDecimal()
+                )
 
-                    val tokenTransfers: List<TokenTransfer> = entry.value.mapNotNull { solscanTx ->
-                        val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[solscanTx.mintAccountAddress] }
-                        val tokenAccountAddress = solscanTx.tokenAccountAddress
-                        val amount = solscanTx.splBalanceChange?.toBigDecimal()
-                        val balance = solscanTx.postBalance?.toBigDecimal()
+                val tokenTransfers: List<TokenTransfer> = entry.value.mapNotNull { solscanTx ->
+                    val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[solscanTx.mintAccountAddress] }
+                    val tokenAccountAddress = solscanTx.tokenAccountAddress
+                    val amount = solscanTx.splBalanceChange?.toBigDecimal()
+                    val balance = solscanTx.postBalance?.toBigDecimal()
 
-                        if (mintAccount != null && tokenAccountAddress != null && amount != null && balance != null) {
-                            tokenAccounts.add(TokenAccount(tokenAccountAddress, mintAccount.address, balance))
+                    if (mintAccount != null && tokenAccountAddress != null && amount != null && balance != null) {
+                        tokenAccounts.add(TokenAccount(tokenAccountAddress, mintAccount.address, balance))
 
-                            TokenTransfer(entry.key, mintAccount.address, amount)
-                        } else {
-                            null
-                        }
+                        TokenTransfer(entry.key, mintAccount.address, amount)
+                    } else {
+                        null
                     }
-
-                    FullTransaction(transaction, tokenTransfers)
                 }
 
-            if (splTransferTransactions.isNotEmpty()) {
-                storage.updateSplTransferTransactions(splTransferTransactions)
+                FullTransaction(transaction, tokenTransfers)
             }
 
-            if (solTransfers.isNotEmpty() || splTransferTransactions.isNotEmpty() || rpcNodeTxs.isNotEmpty()) {
-                val fullTransactions: MutableMap<String, FullTransaction> = mutableMapOf()
+        if (solTransfers.isNotEmpty() || splTransferTransactions.isNotEmpty() || rpcNodeTxs.isNotEmpty()) {
+            val fullTransactionsMap: MutableMap<String, FullTransaction> = mutableMapOf()
 
-                for (transaction in rpcNodeTxs) {
-                    fullTransactions[transaction.hash] = FullTransaction(transaction, listOf())
-                }
-
-                for (transaction in solTransfers) {
-                    fullTransactions[transaction.hash] = FullTransaction(transaction, listOf())
-                }
-
-                for (fullTransaction in splTransferTransactions) {
-                    val transaction = fullTransactions[fullTransaction.transaction.hash]?.transaction ?: fullTransaction.transaction
-                    fullTransactions[transaction.hash] = FullTransaction(transaction, fullTransaction.tokenTransfers)
-                }
-
-                listener?.onTransactionsReceived(fullTransactions.values.toList())
+            for (transaction in rpcNodeTxs) {
+                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
             }
 
-            listener?.onUpdateTokenAccounts(tokenAccounts)
+            for (transaction in solTransfers) {
+                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
+            }
+
+            for (fullTransaction in splTransferTransactions) {
+                val transaction = fullTransactionsMap[fullTransaction.transaction.hash]?.transaction ?: fullTransaction.transaction
+                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, fullTransaction.tokenTransfers)
+            }
+
+            val fullTransactions = fullTransactionsMap.values.toList()
+
+            storage.addTransactions(fullTransactions)
+            listener?.onTransactionsReceived(fullTransactions)
+        }
+
+        if (tokenAccounts.isNotEmpty()) {
+            listener?.onUpdateTokenAccounts(tokenAccounts.toSet().toList())
         }
     }
 
-    private fun getMintAccounts(mintAddresses: List<String>, onComplete: (Map<String, MintAccount>) -> Unit) {
+    private suspend fun getMintAccounts(mintAddresses: List<String>) = suspendCoroutine<Map<String, MintAccount>> { continuation ->
         if (mintAddresses.isEmpty()) {
-            onComplete.invoke(mapOf())
-            return
+            continuation.resume(mapOf())
+            return@suspendCoroutine
         }
 
         rpcClient.getMultipleAccounts(mintAddresses.map { PublicKey.valueOf(it) }, Mint::class.java) { result ->
@@ -185,18 +190,17 @@ class TransactionSyncer(
                     }
                 }
 
-                onComplete.invoke(mintAccounts)
+                continuation.resume(mintAccounts)
             }
 
             result.onFailure { exception ->
-                syncState = SolanaKit.SyncState.NotSynced(exception)
+                continuation.resumeWithException(exception)
             }
         }
     }
 
     companion object {
         val tokenProgramId = TokenProgram.PROGRAM_ID.toBase58()
-        val solDecimals = 8
     }
 
 }

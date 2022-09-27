@@ -9,17 +9,17 @@
             android:id="@+id/navigation_balance"
             android:name="io.horizontalsystems.solanakit.sample.ui.balance.BalanceFragment"
             android:label="@string/title_balance_tab"
-            tools:layout="@layout/fragment_home" />
+            tools:layout="@layout/fragment_balance" />
 
     <fragment
             android:id="@+id/navigation_transactions"
             android:name="io.horizontalsystems.solanakit.sample.ui.transactions.TransactionsFragment"
             android:label="@string/title_transactions_tab"
-            tools:layout="@layout/fragment_dashboard" />
+            tools:layout="@layout/fragment_send" />
 
     <fragment
             android:id="@+id/navigation_send"
             android:name="io.horizontalsystems.solanakit.sample.ui.send.SendFragment"
             android:label="@string/title_send_tab"
-            tools:layout="@layout/fragment_notifications" />
+            tools:layout="@layout/fragment_transactions" />
 </navigation>

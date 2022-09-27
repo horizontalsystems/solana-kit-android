@@ -7,23 +7,22 @@ import com.solana.core.PublicKey
 import com.solana.networking.Network
 import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.core.*
-import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
-import io.horizontalsystems.solanakit.noderpc.ApiSyncer
-import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.network.ConnectionManager
+import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
-import io.reactivex.BackpressureStrategy
-import io.reactivex.Flowable
+import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import io.reactivex.Single
-import io.reactivex.subjects.PublishSubject
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.math.BigDecimal
 import java.util.*
 
 class SolanaKit(
@@ -36,55 +35,70 @@ class SolanaKit(
     private val address: String,
 ) : ISyncListener {
 
-    private val lastBlockHeightSubject = PublishSubject.create<Long>()
-    private val syncStateSubject = PublishSubject.create<SyncState>()
-    private val tokenSyncStateSubject = PublishSubject.create<SyncState>()
-    private val balanceSubject = PublishSubject.create<Long>()
+    private var scope: CoroutineScope? = null
 
-    var isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
+    private val _lastBlockHeightFlow = MutableStateFlow(lastBlockHeight)
 
-    val syncState: SyncState
-        get() = syncManager.balanceSyncState
+    private val _balanceSyncStateFlow = MutableStateFlow(syncState)
+    private val _balanceFlow = MutableStateFlow(balance)
+    private val _tokenBalanceSyncStateFlow = MutableStateFlow(tokenBalanceSyncState)
+    private val _tokenBalanceFlow = MutableStateFlow<TokenAccount?>(null)
+    private val _transactionsSyncStateFlow = MutableStateFlow(transactionsSyncState)
+    private val _transactionsFlow = MutableStateFlow<List<FullTransaction>>(listOf())
 
-    val tokenBalanceSyncState: SyncState
-        get() = syncManager.tokenBalanceSyncState
-
-    val transactionsSyncState: SyncState
-        get() = syncManager.transactionsSyncState
-
+    val isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
     val receiveAddress = address
 
     val lastBlockHeight: Long?
         get() = apiSyncer.lastBlockHeight
 
+    val syncState: SyncState
+        get() = syncManager.balanceSyncState
+
     val balance: Long?
         get() = balanceManager.balance
 
-    val lastBlockHeightFlowable: Flowable<Long>
-        get() = lastBlockHeightSubject.toFlowable(BackpressureStrategy.BUFFER)
+    val tokenBalanceSyncState: SyncState
+        get() = syncManager.tokenBalanceSyncState
 
-    val syncStateFlowable: Flowable<SyncState>
-        get() = syncStateSubject.toFlowable(BackpressureStrategy.BUFFER)
+    fun tokenBalance(mintAddress: String): BigDecimal? =
+        tokenAccountManager.balance(mintAddress)
 
-//    val transactionsSyncStateFlowable: Flowable<SyncState>
-//        get() = transactionSyncManager.syncStateAsync
+    val transactionsSyncState: SyncState
+        get() = syncManager.transactionsSyncState
 
-    val balanceFlowable: Flowable<Long>
-        get() = balanceSubject.toFlowable(BackpressureStrategy.BUFFER)
+    val lastBlockHeightFlow: StateFlow<Long?> = _lastBlockHeightFlow
 
-//    val allTransactionsFlowable: Flowable<Pair<List<FullTransaction>, Boolean>>
-//        get() = transactionManager.fullTransactionsAsync
+    val balanceSyncStateFlow: StateFlow<SyncState> = _balanceSyncStateFlow
+    val balanceFlow: StateFlow<Long?> = _balanceFlow
+
+    val tokenBalanceSyncStateFlow: StateFlow<SyncState> = _tokenBalanceSyncStateFlow
+    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = _tokenBalanceFlow
+        .filterNotNull()
+        .filter { it.mintAddress == mintAddress }
+        .map { it.balance }
+
+    val transactionsSyncStateFlow: StateFlow<SyncState> = _transactionsSyncStateFlow
+    val transactionsFlow: StateFlow<List<FullTransaction>> = _transactionsFlow
 
     fun start() {
-        syncManager.start()
+        scope = CoroutineScope(Dispatchers.IO)
+        scope?.launch {
+            syncManager.start(this)
+        }
     }
 
     fun stop() {
         syncManager.stop()
+        scope?.cancel()
     }
 
     fun refresh() {
-        syncManager.refresh()
+        if (!scope?.isActive!!) return
+
+        scope?.launch {
+            syncManager.refresh(this)
+        }
     }
 
     fun debugInfo(): String {
@@ -100,31 +114,33 @@ class SolanaKit(
     }
 
     override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
-        lastBlockHeightSubject.onNext(lastBlockHeight)
+        _lastBlockHeightFlow.tryEmit(lastBlockHeight)
     }
 
-    override fun onUpdateSyncState(syncState: SyncState) {
-        syncStateSubject.onNext(syncState)
-    }
-
-    override fun onUpdateTokenSyncState(syncState: SyncState) {
-        tokenSyncStateSubject.onNext(syncState)
-    }
-
-    override fun onUpdateTransactionSyncState(syncState: SyncState) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onUpdateTransactions(transactions: List<FullTransaction>) {
-        TODO("Not yet implemented")
+    override fun onUpdateBalanceSyncState(syncState: SyncState) {
+        _balanceSyncStateFlow.tryEmit(syncState)
     }
 
     override fun onUpdateBalance(balance: Long) {
-        TODO("Not yet implemented")
+        _balanceFlow.tryEmit(balance)
+    }
+
+    override fun onUpdateTokenSyncState(syncState: SyncState) {
+        _tokenBalanceSyncStateFlow.tryEmit(syncState)
     }
 
     override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {
-        TODO("Not yet implemented")
+        tokenAccounts.forEach {
+            _tokenBalanceFlow.tryEmit(it)
+        }
+    }
+
+    override fun onUpdateTransactionSyncState(syncState: SyncState) {
+        _transactionsSyncStateFlow.tryEmit(syncState)
+    }
+
+    override fun onUpdateTransactions(transactions: List<FullTransaction>) {
+        _transactionsFlow.tryEmit(transactions)
     }
 
     fun getFullTransactionsAsync(onlySolTransfers: Boolean = false, incoming: Boolean? = null, fromHash: ByteArray? = null, limit: Int? = null): Single<List<FullTransaction>> {
@@ -202,7 +218,10 @@ class SolanaKit(
 
             val syncManager = SyncManager(apiSyncer, balanceManager, transactionSyncer, tokenAccountManager)
 
-            return SolanaKit(apiSyncer, balanceManager, tokenAccountManager, transactionManager, syncManager, rpcSource, address)
+            val kit = SolanaKit(apiSyncer, balanceManager, tokenAccountManager, transactionManager, syncManager, rpcSource, address)
+            syncManager.listener = kit
+
+            return kit
         }
 
         fun clear(context: Context, walletId: String) {

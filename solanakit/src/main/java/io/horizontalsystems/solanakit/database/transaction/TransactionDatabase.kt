@@ -12,12 +12,12 @@ import io.horizontalsystems.solanakit.models.*
 
 @Database(
     entities = [
-        LastSyncBlockTime::class,
+        SyncedBlockTime::class,
         MintAccount::class,
         TokenTransfer::class,
         Transaction::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)

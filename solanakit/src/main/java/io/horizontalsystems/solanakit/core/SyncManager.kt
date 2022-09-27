@@ -8,13 +8,15 @@ import io.horizontalsystems.solanakit.noderpc.IApiSyncerListener
 import io.horizontalsystems.solanakit.noderpc.SyncerState
 import io.horizontalsystems.solanakit.transactions.ITransactionListener
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 interface ISyncListener {
     fun onUpdateLastBlockHeight(lastBlockHeight: Long)
     fun onUpdateBalance(balance: Long)
     fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>)
     fun onUpdateTransactions(transactions: List<FullTransaction>)
-    fun onUpdateSyncState(syncState: SolanaKit.SyncState)
+    fun onUpdateBalanceSyncState(syncState: SolanaKit.SyncState)
     fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState)
     fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState)
 }
@@ -24,7 +26,9 @@ class SyncManager(
     private val balanceSyncer: BalanceManager,
     private val transactionSyncer: TransactionSyncer,
     private val tokenAccountSyncer: TokenAccountManager
-): IApiSyncerListener, IBalanceListener, ITransactionListener, ITokenListener {
+) : IApiSyncerListener, IBalanceListener, ITransactionListener, ITokenListener {
+
+    private var scope: CoroutineScope? = null
 
     var listener: ISyncListener? = null
 
@@ -42,18 +46,23 @@ class SyncManager(
     init {
         balanceSyncer.listener = this
         apiSyncer.listener = this
+        tokenAccountSyncer.listener = this
+        transactionSyncer.listener = this
     }
 
-    fun start() {
+    suspend fun start(scope: CoroutineScope) {
         if (started) return
         started = true
+        this.scope = scope
 
+        apiSyncer.start(scope)
         balanceSyncer.start()
         tokenAccountSyncer.start()
         transactionSyncer.sync()
+//       tokenAccountSyncer.sync()
     }
 
-    fun refresh() {
+    suspend fun refresh(scope: CoroutineScope) {
         when (apiSyncer.state) {
             SyncerState.Ready -> {
                 balanceSyncer.sync()
@@ -61,13 +70,14 @@ class SyncManager(
                 apiSyncer.sync()
             }
             is SyncerState.NotReady -> {
-                start()
+                start(scope)
             }
         }
     }
 
     fun stop() {
         started = false
+        scope = null
 
         apiSyncer.stop()
         balanceSyncer.stop()
@@ -77,46 +87,68 @@ class SyncManager(
     override fun didUpdateApiState(state: SyncerState) {
         when (state) {
             SyncerState.Ready -> {
-                balanceSyncer.sync()
+                scope?.launch {
+                    balanceSyncer.sync()
+                    tokenAccountSyncer.sync()
+                }
             }
             is SyncerState.NotReady -> {
-                balanceSyncer.stop(state.error)
+                scope?.launch {
+                    balanceSyncer.stop(state.error)
+                    tokenAccountSyncer.stop(state.error)
+                }
             }
         }
     }
 
-    override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
-        listener?.onUpdateLastBlockHeight(lastBlockHeight)
-        transactionSyncer.sync()
-    }
-
     override fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState) {
-        listener?.onUpdateSyncState(syncState)
+        scope?.launch {
+            listener?.onUpdateTokenSyncState(syncState)
+        }
     }
 
     override fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState) {
-        listener?.onUpdateTransactionSyncState(syncState)
+        scope?.launch {
+            listener?.onUpdateTransactionSyncState(syncState)
+        }
     }
 
-    override fun onUpdateSyncState(value: SolanaKit.SyncState) {
-        listener?.onUpdateTokenSyncState(value)
+    override fun onUpdateBalanceSyncState(value: SolanaKit.SyncState) {
+        scope?.launch {
+            listener?.onUpdateBalanceSyncState(value)
+        }
     }
 
-    override fun onUpdateTokenAccounts(tokenAccounts: List<TokenAccount>) {
-        tokenAccountSyncer.sync(tokenAccounts)
+    override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
+        scope?.launch {
+            listener?.onUpdateLastBlockHeight(lastBlockHeight)
+            transactionSyncer.sync()
+        }
     }
 
     override fun onUpdateBalance(balance: Long) {
-        listener?.onUpdateBalance(balance)
+        scope?.launch {
+            listener?.onUpdateBalance(balance)
+        }
     }
 
     override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {
-        listener?.onUpdateTokenBalances(tokenAccounts)
+        scope?.launch {
+            listener?.onUpdateTokenBalances(tokenAccounts)
+        }
+    }
+
+    override fun onUpdateTokenAccounts(tokenAccounts: List<TokenAccount>) {
+        scope?.launch {
+            tokenAccountSyncer.sync(tokenAccounts)
+        }
     }
 
     override fun onTransactionsReceived(fullTransactions: List<FullTransaction>) {
-        listener?.onUpdateTransactions(fullTransactions)
-        balanceSyncer.sync()
+        scope?.launch {
+            listener?.onUpdateTransactions(fullTransactions)
+            balanceSyncer.sync()
+        }
     }
 
 }

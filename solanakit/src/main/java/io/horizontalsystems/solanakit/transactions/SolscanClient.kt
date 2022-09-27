@@ -15,7 +15,7 @@ class SolscanClient(
         val path = "?account=${account}&type=all&fromTime=${fromTime ?: 0}&toTime=10000000000"
 
         val request: Request = Request.Builder().url(url + path).build()
-        httpClient.newCall(request).enqueue(object : Callback {
+                httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 onComplete(Result.failure(RuntimeException(e)))
             }
@@ -42,7 +42,7 @@ class SolscanClient(
                 SolscanExportedTransaction(
                     fields[0].trim().removeSurrounding("\""),
                     fields[1].trim().removeSurrounding("\""),
-                    fields[2].trim().removeSurrounding("\""),
+                    fields[2].trim().removeSurrounding("\"").toLong(),
                     fields[4].trim().removeSurrounding("\""),
                     fields[5].trim().removeSurrounding("\""),
                     fields[6].trim().removeSurrounding("\""),
@@ -64,7 +64,7 @@ class SolscanClient(
 data class SolscanExportedTransaction(
     val type: String,
     val hash: String,
-    val blockTime: String,
+    val blockTime: Long,
     val fee: String,
     val tokenAccountAddress: String?,
     val changeType: String?,

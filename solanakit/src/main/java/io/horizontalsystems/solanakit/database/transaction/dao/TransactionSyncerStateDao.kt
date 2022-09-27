@@ -4,15 +4,15 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import io.horizontalsystems.solanakit.models.LastSyncBlockTime
+import io.horizontalsystems.solanakit.models.SyncedBlockTime
 
 @Dao
 interface TransactionSyncerStateDao {
 
-    @Query("SELECT * FROM LastSyncBlockTime WHERE syncSourceName = :syncSourceName LIMIT 1")
-    fun get(syncSourceName: String) : LastSyncBlockTime?
+    @Query("SELECT * FROM SyncedBlockTime WHERE syncSourceName = :syncSourceName LIMIT 1")
+    fun get(syncSourceName: String) : SyncedBlockTime?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun save(transactionSyncerState: LastSyncBlockTime)
+    fun save(transactionSyncerState: SyncedBlockTime)
 
 }

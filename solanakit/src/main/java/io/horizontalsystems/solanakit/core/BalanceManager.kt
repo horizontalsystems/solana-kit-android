@@ -7,7 +7,7 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 
 interface IBalanceListener {
-    fun onUpdateSyncState(value: SolanaKit.SyncState)
+    fun onUpdateBalanceSyncState(value: SolanaKit.SyncState)
     fun onUpdateBalance(balance: Long)
 }
 
@@ -21,7 +21,7 @@ class BalanceManager(
         private set(value) {
             if (value != field) {
                 field = value
-                listener?.onUpdateSyncState(value)
+                listener?.onUpdateBalanceSyncState(value)
             }
         }
 
@@ -53,7 +53,7 @@ class BalanceManager(
     }
 
     private fun handleBalance(balance: Long) {
-        if (this.balance != balance) {
+                if (this.balance != balance) {
             this.balance = balance
             storage.saveBalance(balance)
             listener?.onUpdateBalance(balance)

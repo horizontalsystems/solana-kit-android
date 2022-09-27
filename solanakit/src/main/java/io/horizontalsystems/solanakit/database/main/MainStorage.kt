@@ -31,4 +31,7 @@ class MainStorage(
     fun getTokenAccounts(): List<TokenAccount> =
         database.tokenAccountsDao().getAll()
 
+    fun getTokenAccount(mintAddress: String): TokenAccount? =
+        database.tokenAccountsDao().get(mintAddress)
+
 }

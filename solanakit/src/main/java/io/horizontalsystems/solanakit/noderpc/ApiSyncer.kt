@@ -5,9 +5,10 @@ import com.solana.api.getBlockHeight
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.network.ConnectionManager
-import io.reactivex.disposables.CompositeDisposable
-import java.util.*
-import kotlin.concurrent.schedule
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.flow
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 interface IApiSyncerListener {
     fun didUpdateApiState(state: SyncerState)
@@ -25,9 +26,10 @@ class ApiSyncer(
     private val connectionManager: ConnectionManager,
     private val storage: MainStorage
 ) {
-    private val disposables = CompositeDisposable()
+
+    private var scope: CoroutineScope? = null
     private var isStarted = false
-    private var timer: Timer? = null
+    private var timerJob: Job? = null
 
     init {
         connectionManager.listener = object : ConnectionManager.Listener {
@@ -51,8 +53,9 @@ class ApiSyncer(
     var lastBlockHeight: Long? = storage.getLastBlockHeight()
         private set
 
-    fun start() {
+    fun start(scope: CoroutineScope) {
         isStarted = true
+        this.scope = scope
 
         handleConnectionChange()
     }
@@ -62,7 +65,7 @@ class ApiSyncer(
 
         connectionManager.stop()
         state = SyncerState.NotReady(SolanaKit.SyncError.NotStarted())
-        disposables.clear()
+        scope = null
         stopTimer()
     }
 
@@ -88,7 +91,7 @@ class ApiSyncer(
     }
 
     private fun handleConnectionChange() {
-        if (!isStarted) return
+                if (!isStarted) return
 
         if (connectionManager.isConnected) {
             state = SyncerState.Ready
@@ -100,16 +103,18 @@ class ApiSyncer(
     }
 
     private fun startTimer() {
-        timer = Timer().apply {
-            schedule(0, syncInterval * 1000) {
-                sync()
-            }
+        timerJob = scope?.launch {
+            flow {
+                while (isActive) {
+                    delay(syncInterval.toDuration(DurationUnit.SECONDS))
+                    emit(Unit)
+                }
+            }.collect { sync() }
         }
     }
 
     private fun stopTimer() {
-        timer?.cancel()
-        timer = null
+        timerJob?.cancel()
     }
 
 }
