@@ -9,6 +9,7 @@ import io.horizontalsystems.solanakit.database.transaction.dao.MintAccountDao
 import io.horizontalsystems.solanakit.database.transaction.dao.TransactionSyncerStateDao
 import io.horizontalsystems.solanakit.database.transaction.dao.TransactionsDao
 import io.horizontalsystems.solanakit.models.*
+import java.util.concurrent.Executors
 
 @Database(
     entities = [
@@ -31,6 +32,9 @@ abstract class TransactionDatabase : RoomDatabase() {
 
         fun getInstance(context: Context, databaseName: String): TransactionDatabase {
             return Room.databaseBuilder(context, TransactionDatabase::class.java, databaseName)
+//                .setQueryCallback({ sqlQuery, bindArgs ->
+//                    println("SQL Query: $sqlQuery SQL Args: $bindArgs")
+//                }, Executors.newSingleThreadExecutor())
                 .fallbackToDestructiveMigration()
                 .allowMainThreadQueries()
                 .build()

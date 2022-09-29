@@ -53,12 +53,12 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.1'
 
     implementation 'com.github.metaplex-foundation.SolanaKT:solana:1eaf5c6'
-    implementation 'com.github.metaplex-foundation.SolanaKT:rxsolana:1eaf5c6'
     implementation 'com.squareup.moshi:moshi-kotlin:1.12.0'
 
     implementation 'com.github.horizontalsystems:hd-wallet-kit-android:f64354d'
 
     implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
     kapt "androidx.room:room-compiler:$room_version"
 
     testImplementation 'junit:junit:4.13.2'

@@ -82,8 +82,8 @@ class ApiSyncer(
     }
 
     private fun handleBlockHeight(blockHeight: Long) {
-        if (this.lastBlockHeight == lastBlockHeight) {
-            this.lastBlockHeight = lastBlockHeight
+        if (this.lastBlockHeight != blockHeight) {
+            this.lastBlockHeight = blockHeight
             storage.saveLastBlockHeight(blockHeight)
         }
 
@@ -91,7 +91,7 @@ class ApiSyncer(
     }
 
     private fun handleConnectionChange() {
-                if (!isStarted) return
+        if (!isStarted) return
 
         if (connectionManager.isConnected) {
             state = SyncerState.Ready

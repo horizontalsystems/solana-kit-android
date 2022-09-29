@@ -17,7 +17,6 @@ import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
-import io.reactivex.Single
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import okhttp3.OkHttpClient
@@ -143,13 +142,14 @@ class SolanaKit(
         _transactionsFlow.tryEmit(transactions)
     }
 
-    fun getFullTransactionsAsync(onlySolTransfers: Boolean = false, incoming: Boolean? = null, fromHash: ByteArray? = null, limit: Int? = null): Single<List<FullTransaction>> {
-        return transactionManager.getFullTransactionAsync(onlySolTransfers, incoming, fromHash, limit)
-    }
+    suspend fun getAllTransactions(incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
+        transactionManager.getAllTransaction(incoming, fromHash, limit)
 
-    fun getFullTransactionsAsync(splTokenAddress: String, incoming: Boolean? = null, fromHash: ByteArray? = null, limit: Int? = null): Single<List<FullTransaction>> {
-        TODO("Not yet implemented")
-    }
+    suspend fun getSolTransactions(incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
+        transactionManager.getSolTransaction(incoming, fromHash, limit)
+
+    suspend fun getSplTransactions(mintAddress: String, incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
+        transactionManager.getSplTransaction(mintAddress, incoming, fromHash, limit)
 
     sealed class SyncState {
         class Synced : SyncState()
@@ -211,7 +211,7 @@ class SolanaKit(
             val tokenAccountManager = TokenAccountManager(rpcApiClient, mainStorage)
 
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
-            val transactionStorage = TransactionStorage(transactionDatabase)
+            val transactionStorage = TransactionStorage(transactionDatabase, address)
             val solscanClient = SolscanClient(OkHttpClient())
             val transactionManager = TransactionManager(transactionStorage)
             val transactionSyncer = TransactionSyncer(publicKey, rpcApiClient, solscanClient, transactionStorage)

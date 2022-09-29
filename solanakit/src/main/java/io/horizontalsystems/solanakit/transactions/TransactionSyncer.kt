@@ -9,6 +9,7 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.*
 import io.horizontalsystems.solanakit.noderpc.endpoints.getSignaturesForAddress
+import java.math.BigDecimal
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -134,7 +135,7 @@ class TransactionSyncer(
                     if (mintAccount != null && tokenAccountAddress != null && amount != null && balance != null) {
                         tokenAccounts.add(TokenAccount(tokenAccountAddress, mintAccount.address, balance))
 
-                        TokenTransfer(entry.key, mintAccount.address, amount)
+                        TokenTransfer(entry.key, mintAccount.address, amount > BigDecimal.ZERO, amount)
                     } else {
                         null
                     }

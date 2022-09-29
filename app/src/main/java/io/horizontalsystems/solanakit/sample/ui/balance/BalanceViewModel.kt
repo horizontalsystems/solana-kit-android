@@ -3,7 +3,6 @@ package io.horizontalsystems.solanakit.sample.ui.balance
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.sample.App
 import kotlinx.coroutines.launch
 
@@ -21,31 +20,31 @@ class BalanceViewModel : ViewModel() {
 
         viewModelScope.launch {
             kit.balanceFlow.collect {
-                                balance.postValue("Balance: $it")
+                balance.postValue("Balance: $it")
             }
         }
 
         viewModelScope.launch {
             kit.balanceSyncStateFlow.collect {
-                                balanceSyncState.postValue("BalanceState: $it")
+                balanceSyncState.postValue("BalanceState: $it")
             }
         }
 
         viewModelScope.launch {
             kit.tokenBalanceSyncStateFlow.collect {
-                                tokenBalanceSyncState.postValue("TokenBalanceState: $it")
+                tokenBalanceSyncState.postValue("TokenBalanceState: $it")
             }
         }
 
         viewModelScope.launch {
             kit.transactionsSyncStateFlow.collect {
-                                transactionsSyncState.postValue("TxSyncState: $it")
+                transactionsSyncState.postValue("TxSyncState: $it")
             }
         }
 
         viewModelScope.launch {
             kit.lastBlockHeightFlow.collect {
-                                lastBlockHeight.postValue("LastBlockHeight: $it")
+                lastBlockHeight.postValue("LastBlockHeight: $it")
             }
         }
 

@@ -1,9 +1,8 @@
 package io.horizontalsystems.solanakit.database.transaction.dao
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
+import androidx.room.*
+import androidx.sqlite.db.SupportSQLiteQuery
+import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.TokenTransfer
 import io.horizontalsystems.solanakit.models.Transaction
 
@@ -21,5 +20,28 @@ interface TransactionsDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertTokenTransfers(tokenTransfers: List<TokenTransfer>)
+
+    @RawQuery
+    suspend fun getTransactions(query: SupportSQLiteQuery): List<FullTransactionWrapper>
+
+    data class FullTransactionWrapper(
+        @Embedded
+        val transaction: Transaction,
+
+        @Relation(
+            entity = TokenTransfer::class,
+            parentColumn = "hash",
+            entityColumn = "transactionHash"
+        )
+        val tokenTransfers: List<TokenTransfer>
+    ) {
+
+        val fullTransaction: FullTransaction
+            get() = FullTransaction(
+                transaction,
+                tokenTransfers
+            )
+
+    }
 
 }
