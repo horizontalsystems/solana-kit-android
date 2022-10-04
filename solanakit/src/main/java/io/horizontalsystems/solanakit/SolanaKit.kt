@@ -36,49 +36,43 @@ class SolanaKit(
 
     private var scope: CoroutineScope? = null
 
-    private val _lastBlockHeightFlow = MutableStateFlow(lastBlockHeight)
-
     private val _balanceSyncStateFlow = MutableStateFlow(syncState)
-    private val _balanceFlow = MutableStateFlow(balance)
     private val _tokenBalanceSyncStateFlow = MutableStateFlow(tokenBalanceSyncState)
-    private val _tokenBalanceFlow = MutableStateFlow<TokenAccount?>(null)
     private val _transactionsSyncStateFlow = MutableStateFlow(transactionsSyncState)
-    private val _transactionsFlow = MutableStateFlow<List<FullTransaction>>(listOf())
+
+    private val _lastBlockHeightFlow = MutableStateFlow(lastBlockHeight)
+    private val _balanceFlow = MutableStateFlow(balance)
 
     val isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
     val receiveAddress = address
 
     val lastBlockHeight: Long?
         get() = apiSyncer.lastBlockHeight
-
-    val syncState: SyncState
-        get() = syncManager.balanceSyncState
-
-    val balance: Long?
-        get() = balanceManager.balance
-
-    val tokenBalanceSyncState: SyncState
-        get() = syncManager.tokenBalanceSyncState
-
-    fun tokenBalance(mintAddress: String): BigDecimal? =
-        tokenAccountManager.balance(mintAddress)
-
-    val transactionsSyncState: SyncState
-        get() = syncManager.transactionsSyncState
-
     val lastBlockHeightFlow: StateFlow<Long?> = _lastBlockHeightFlow
 
+    // Balance API
+    val syncState: SyncState
+        get() = syncManager.balanceSyncState
     val balanceSyncStateFlow: StateFlow<SyncState> = _balanceSyncStateFlow
+    val balance: Long?
+        get() = balanceManager.balance
     val balanceFlow: StateFlow<Long?> = _balanceFlow
 
+    // Token accounts API
+    val tokenBalanceSyncState: SyncState
+        get() = syncManager.tokenBalanceSyncState
     val tokenBalanceSyncStateFlow: StateFlow<SyncState> = _tokenBalanceSyncStateFlow
-    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = _tokenBalanceFlow
-        .filterNotNull()
-        .filter { it.mintAddress == mintAddress }
-        .map { it.balance }
+    fun tokenBalance(mintAddress: String): BigDecimal? =
+        tokenAccountManager.balance(mintAddress)
+    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = tokenAccountManager.tokenBalanceFlow(mintAddress)
 
+    // Transactions API
+    val transactionsSyncState: SyncState
+        get() = syncManager.transactionsSyncState
     val transactionsSyncStateFlow: StateFlow<SyncState> = _transactionsSyncStateFlow
-    val transactionsFlow: StateFlow<List<FullTransaction>> = _transactionsFlow
+    fun allTransactionsFlow(incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.allTransactionsFlow(incoming)
+    fun solTransactionsFlow(incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.solTransactionsFlow(incoming)
+    fun splTransactionsFlow(mintAddress: String, incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.splTransactionsFlow(mintAddress, incoming)
 
     fun start() {
         scope = CoroutineScope(Dispatchers.IO)
@@ -128,18 +122,8 @@ class SolanaKit(
         _tokenBalanceSyncStateFlow.tryEmit(syncState)
     }
 
-    override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {
-        tokenAccounts.forEach {
-            _tokenBalanceFlow.tryEmit(it)
-        }
-    }
-
     override fun onUpdateTransactionSyncState(syncState: SyncState) {
         _transactionsSyncStateFlow.tryEmit(syncState)
-    }
-
-    override fun onUpdateTransactions(transactions: List<FullTransaction>) {
-        _transactionsFlow.tryEmit(transactions)
     }
 
     suspend fun getAllTransactions(incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
@@ -213,8 +197,8 @@ class SolanaKit(
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, address)
             val solscanClient = SolscanClient(OkHttpClient())
-            val transactionManager = TransactionManager(transactionStorage)
-            val transactionSyncer = TransactionSyncer(publicKey, rpcApiClient, solscanClient, transactionStorage)
+            val transactionManager = TransactionManager(address, transactionStorage, tokenAccountManager)
+            val transactionSyncer = TransactionSyncer(publicKey, rpcApiClient, solscanClient, transactionStorage, transactionManager)
 
             val syncManager = SyncManager(apiSyncer, balanceManager, transactionSyncer, tokenAccountManager)
 
@@ -229,11 +213,7 @@ class SolanaKit(
         }
 
         private fun loggingHttpClient(): OkHttpClient {
-            val consoleLogger = object : HttpLoggingInterceptor.Logger {
-                override fun log(message: String) {
-                    println(message)
-                }
-            }
+            val consoleLogger = HttpLoggingInterceptor.Logger { message -> println(message) }
 
             val logging = HttpLoggingInterceptor(consoleLogger)
             logging.level = HttpLoggingInterceptor.Level.BODY

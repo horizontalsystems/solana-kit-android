@@ -28,6 +28,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+        freeCompilerArgs += [
+                "-Xjvm-default=all",
+        ]
     }
 
 }
@@ -54,6 +57,8 @@ dependencies {
 
     implementation 'com.github.metaplex-foundation.SolanaKT:solana:1eaf5c6'
     implementation 'com.squareup.moshi:moshi-kotlin:1.12.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.10'
 
     implementation 'com.github.horizontalsystems:hd-wallet-kit-android:f64354d'
 

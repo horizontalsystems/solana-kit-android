@@ -19,7 +19,7 @@ import io.horizontalsystems.solanakit.models.TokenAccount
         LastBlockHeightEntity::class,
         TokenAccount::class
     ],
-    version = 2, exportSchema = false
+    version = 3, exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)
 abstract class MainDatabase : RoomDatabase() {

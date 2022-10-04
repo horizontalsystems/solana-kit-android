@@ -13,6 +13,7 @@ class TokenAccount(
     val address: String,
     val mintAddress: String,
     val balance: BigDecimal,
+    val decimals: Int
 
 ): BorshCodable {
 

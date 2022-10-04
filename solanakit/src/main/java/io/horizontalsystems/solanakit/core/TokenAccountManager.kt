@@ -8,6 +8,7 @@ import com.solana.models.buffer.BufferInfo
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.models.TokenAccount
+import kotlinx.coroutines.flow.*
 import java.math.BigDecimal
 
 interface ITokenListener {
@@ -30,8 +31,15 @@ class TokenAccountManager(
 
     var listener: ITokenListener? = null
 
+    private val _tokenBalanceFlow = MutableStateFlow<TokenAccount?>(null)
+
+    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = _tokenBalanceFlow
+            .filterNotNull()
+            .filter { it.mintAddress == mintAddress }
+            .map { it.balance.movePointLeft(it.decimals) }
+
     fun balance(mintAddress: String): BigDecimal? =
-        storage.getTokenAccount(mintAddress)?.balance
+        storage.getTokenAccount(mintAddress)?.let{ it.balance.movePointLeft(it.decimals) }
 
     fun start() {
         syncState = SolanaKit.SyncState.Syncing()
@@ -65,14 +73,21 @@ class TokenAccountManager(
         for ((index, tokenAccount) in tokenAccounts.withIndex()) {
             tokenAccountsBufferInfo[index]?.let { account ->
                 val balance = account.data?.value?.lamports?.toBigDecimal() ?: tokenAccount.balance
-                updatedTokenAccounts.add(TokenAccount(tokenAccount.address, tokenAccount.mintAddress, balance))
+                updatedTokenAccounts.add(TokenAccount(tokenAccount.address, tokenAccount.mintAddress, balance, tokenAccount.decimals))
             }
         }
 
         storage.saveTokenAccounts(updatedTokenAccounts)
         listener?.onUpdateTokenBalances(updatedTokenAccounts)
+        tokenAccounts.forEach {
+            _tokenBalanceFlow.tryEmit(it)
+        }
 
         syncState = SolanaKit.SyncState.Synced()
+    }
+
+    fun saveAccounts(uniqueTokenAccounts: List<TokenAccount>) {
+        storage.saveTokenAccounts(uniqueTokenAccounts)
     }
 
 }

@@ -15,15 +15,16 @@ class SolscanClient(
         val path = "?account=${account}&type=all&fromTime=${fromTime ?: 0}&toTime=10000000000"
 
         val request: Request = Request.Builder().url(url + path).build()
-                httpClient.newCall(request).enqueue(object : Callback {
+        httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 onComplete(Result.failure(RuntimeException(e)))
             }
+
             override fun onResponse(call: Call, response: Response) {
                 response.body?.let { body ->
                     val result = readCsv(body.byteStream())
                     onComplete(Result.success(result))
-                }?:run {
+                } ?: run {
                     onComplete(Result.failure(NetworkingError.invalidResponseNoData))
                 }
 
@@ -40,24 +41,27 @@ class SolscanClient(
             .map {
                 val fields = it.split(',', ignoreCase = false, limit = 16)
                 SolscanExportedTransaction(
-                    fields[0].trim().removeSurrounding("\""),
-                    fields[1].trim().removeSurrounding("\""),
-                    fields[2].trim().removeSurrounding("\"").toLong(),
-                    fields[4].trim().removeSurrounding("\""),
-                    fields[5].trim().removeSurrounding("\""),
-                    fields[6].trim().removeSurrounding("\""),
-                    fields[7].trim().removeSurrounding("\""),
-                    fields[8].trim().removeSurrounding("\""),
-                    fields[9].trim().removeSurrounding("\""),
-                    fields[10].trim().removeSurrounding("\""),
-                    fields[11].trim().removeSurrounding("\""),
-                    fields[12].trim().removeSurrounding("\""),
-                    fields[13].trim().removeSurrounding("\""),
-                    fields[14].trim().removeSurrounding("\""),
-                    fields[15].trim().removeSurrounding("\""),
+                    toNotOptionalString(fields[0]),
+                    toNotOptionalString(fields[1]),
+                    toNotOptionalString(fields[2]).toLong(),
+                    toNotOptionalString(fields[4]),
+                    toOptionalString(fields[5]),
+                    toOptionalString(fields[6]),
+                    toOptionalString(fields[7]),
+                    toOptionalString(fields[8]),
+                    toOptionalString(fields[9]),
+                    toOptionalString(fields[10]),
+                    toNotOptionalString(fields[11]),
+                    toNotOptionalString(fields[12]),
+                    toOptionalString(fields[13]),
+                    toOptionalString(fields[14]),
+                    toOptionalString(fields[15])
                 )
             }.toList()
     }
+
+    private fun toNotOptionalString(value: String) = value.trim().removeSurrounding("\"")
+    private fun toOptionalString(value: String): String? = value.trim().removeSurrounding("\"").ifEmpty { null }
 
 }
 

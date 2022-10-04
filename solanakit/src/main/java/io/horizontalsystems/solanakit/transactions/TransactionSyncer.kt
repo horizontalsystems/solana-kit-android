@@ -9,7 +9,6 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.*
 import io.horizontalsystems.solanakit.noderpc.endpoints.getSignaturesForAddress
-import java.math.BigDecimal
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -24,7 +23,8 @@ class TransactionSyncer(
     private val publicKey: PublicKey,
     private val rpcClient: Api,
     private val solscanClient: SolscanClient,
-    private val storage: TransactionStorage
+    private val storage: TransactionStorage,
+    private val transactionManager: TransactionManager
 ) {
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
         private set(value) {
@@ -47,20 +47,26 @@ class TransactionSyncer(
         try {
             val rpcNodeTxs = getTransactionsFromRpcNode(lastTransactionHash)
             val solscanTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
-            handle(rpcNodeTxs, solscanTxs)
+            val mintAddresses = solscanTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
+            val mintAccounts = getMintAccounts(mintAddresses)
+
+            val (fullTransactions, tokenAccounts) = transactionManager.handle(rpcNodeTxs, solscanTxs, mintAccounts)
 
             if (solscanTxs.isNotEmpty()) {
-                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanTxs.map { it.blockTime }.sorted().last()))
+                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanTxs.maxOf { it.blockTime }))
             }
 
             syncState = SolanaKit.SyncState.Synced()
+
+            listener?.onTransactionsReceived(fullTransactions)
+            listener?.onUpdateTokenAccounts(tokenAccounts)
         } catch (exception: Throwable) {
             syncState = SolanaKit.SyncState.NotSynced(exception)
         }
     }
 
     // TODO: this method must retrieve recursively
-    suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<Transaction>> { continuation ->
+    private suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<Transaction>> { continuation ->
         rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash) { result ->
             result.onSuccess { signatureObjects ->
                 val transactions = signatureObjects.mapNotNull { signatureObject ->
@@ -89,85 +95,6 @@ class TransactionSyncer(
             result.onFailure {
                 continuation.resumeWithException(it)
             }
-        }
-    }
-
-    private suspend fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>) {
-        val solTransfers = solscanTxs
-            .filter { it.type == "SolTransfer" }
-            .map { solscanTx ->
-                Transaction(
-                    solscanTx.hash,
-                    solscanTx.blockTime,
-                    solscanTx.fee.toBigDecimal(),
-                    solscanTx.solTransferSource,
-                    solscanTx.solTransferDestination,
-                    solscanTx.solAmount?.toBigDecimal()
-                )
-            }
-
-        val tokenTransferTransactions = solscanTxs.filter { it.type == "TokenChange" }
-        val mintAddresses = tokenTransferTransactions.mapNotNull { it.mintAccountAddress }.toSet().toList()
-
-        val mintAccounts = getMintAccounts(mintAddresses)
-        val tokenAccounts = mutableListOf<TokenAccount>()
-
-        if (mintAccounts.isNotEmpty()) {
-            storage.addMintAccounts(mintAccounts.values.toList())
-        }
-
-        val splTransferTransactions = tokenTransferTransactions
-            .groupBy { it.hash }
-            .map { entry ->
-                val firstTransfer = entry.value.first()
-                val transaction = Transaction(
-                    entry.key,
-                    firstTransfer.blockTime,
-                    firstTransfer.fee.toBigDecimal()
-                )
-
-                val tokenTransfers: List<TokenTransfer> = entry.value.mapNotNull { solscanTx ->
-                    val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[solscanTx.mintAccountAddress] }
-                    val tokenAccountAddress = solscanTx.tokenAccountAddress
-                    val amount = solscanTx.splBalanceChange?.toBigDecimal()
-                    val balance = solscanTx.postBalance?.toBigDecimal()
-
-                    if (mintAccount != null && tokenAccountAddress != null && amount != null && balance != null) {
-                        tokenAccounts.add(TokenAccount(tokenAccountAddress, mintAccount.address, balance))
-
-                        TokenTransfer(entry.key, mintAccount.address, amount > BigDecimal.ZERO, amount)
-                    } else {
-                        null
-                    }
-                }
-
-                FullTransaction(transaction, tokenTransfers)
-            }
-
-        if (solTransfers.isNotEmpty() || splTransferTransactions.isNotEmpty() || rpcNodeTxs.isNotEmpty()) {
-            val fullTransactionsMap: MutableMap<String, FullTransaction> = mutableMapOf()
-
-            for (transaction in rpcNodeTxs) {
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
-            }
-
-            for (transaction in solTransfers) {
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
-            }
-
-            for (fullTransaction in splTransferTransactions) {
-                val transaction = fullTransactionsMap[fullTransaction.transaction.hash]?.transaction ?: fullTransaction.transaction
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, fullTransaction.tokenTransfers)
-            }
-
-            val fullTransactions = fullTransactionsMap.values.toList()
-
-            storage.addTransactions(fullTransactions)
-            listener?.onTransactionsReceived(fullTransactions)
-        }
-
-        if (tokenAccounts.isNotEmpty()) {
-            listener?.onUpdateTokenAccounts(tokenAccounts.toSet().toList())
         }
     }
 

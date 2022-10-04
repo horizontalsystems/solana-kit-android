@@ -12,13 +12,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 interface ISyncListener {
-    fun onUpdateLastBlockHeight(lastBlockHeight: Long)
-    fun onUpdateBalance(balance: Long)
-    fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>)
-    fun onUpdateTransactions(transactions: List<FullTransaction>)
     fun onUpdateBalanceSyncState(syncState: SolanaKit.SyncState)
     fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState)
     fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState)
+    fun onUpdateLastBlockHeight(lastBlockHeight: Long)
+    fun onUpdateBalance(balance: Long)
 }
 
 class SyncManager(
@@ -59,7 +57,6 @@ class SyncManager(
         balanceSyncer.start()
         tokenAccountSyncer.start()
         transactionSyncer.sync()
-//       tokenAccountSyncer.sync()
     }
 
     suspend fun refresh(scope: CoroutineScope) {
@@ -132,11 +129,7 @@ class SyncManager(
         }
     }
 
-    override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {
-        scope?.launch {
-            listener?.onUpdateTokenBalances(tokenAccounts)
-        }
-    }
+    override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {}
 
     override fun onUpdateTokenAccounts(tokenAccounts: List<TokenAccount>) {
         scope?.launch {
@@ -146,7 +139,6 @@ class SyncManager(
 
     override fun onTransactionsReceived(fullTransactions: List<FullTransaction>) {
         scope?.launch {
-            listener?.onUpdateTransactions(fullTransactions)
             balanceSyncer.sync()
         }
     }
