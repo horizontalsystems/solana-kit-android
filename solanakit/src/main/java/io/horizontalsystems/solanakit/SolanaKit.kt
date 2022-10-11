@@ -2,23 +2,25 @@ package io.horizontalsystems.solanakit
 
 import android.app.Application
 import android.content.Context
+import com.solana.actions.Action
 import com.solana.api.Api
-import com.solana.core.PublicKey
 import com.solana.networking.Network
 import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
+import io.horizontalsystems.solanakit.models.Address
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
-import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
@@ -31,7 +33,7 @@ class SolanaKit(
     private val transactionManager: TransactionManager,
     private val syncManager: SyncManager,
     rpcSource: RpcSource,
-    private val address: String,
+    private val address: Address,
 ) : ISyncListener {
 
     private var scope: CoroutineScope? = null
@@ -44,7 +46,7 @@ class SolanaKit(
     private val _balanceFlow = MutableStateFlow(balance)
 
     val isMainnet: Boolean = rpcSource.endpoint.network == Network.mainnetBeta
-    val receiveAddress = address
+    val receiveAddress = address.publicKey.toBase58()
 
     val lastBlockHeight: Long?
         get() = apiSyncer.lastBlockHeight
@@ -135,6 +137,12 @@ class SolanaKit(
     suspend fun getSplTransactions(mintAddress: String, incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
         transactionManager.getSplTransaction(mintAddress, incoming, fromHash, limit)
 
+    suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction =
+        transactionManager.sendSol(toAddress, amount, signer.account)
+
+    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: BigDecimal, signer: Signer): FullTransaction =
+        transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
+
     sealed class SyncState {
         class Synced : SyncState()
         class NotSynced(val error: Throwable) : SyncState()
@@ -175,32 +183,36 @@ class SolanaKit(
 
     companion object {
 
+        val fee = BigDecimal(0.000005)
+
         fun getInstance(
             application: Application,
-            address: String,
+            addressString: String,
             rpcSource: RpcSource,
             walletId: String
         ): SolanaKit {
-            val router = OkHttpNetworkingRouter(rpcSource.endpoint)
+            val httpClient = loggingHttpClient()
+            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient)
             val connectionManager = ConnectionManager(application)
 
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
             val mainStorage = MainStorage(mainDatabase)
 
             val rpcApiClient = Api(router)
-            val apiSyncer = ApiSyncer(rpcApiClient, 15, connectionManager, mainStorage)
-            val publicKey = PublicKey(address)
+            val rpcAction = Action(rpcApiClient, listOf())
+            val apiSyncer = ApiSyncer(rpcApiClient, rpcSource.syncInterval, connectionManager, mainStorage)
+            val address = Address(addressString)
 
-            val balanceManager = BalanceManager(publicKey, rpcApiClient, mainStorage)
+            val balanceManager = BalanceManager(address.publicKey, rpcApiClient, mainStorage)
             val tokenAccountManager = TokenAccountManager(rpcApiClient, mainStorage)
 
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
-            val transactionStorage = TransactionStorage(transactionDatabase, address)
-            val solscanClient = SolscanClient(OkHttpClient())
-            val transactionManager = TransactionManager(address, transactionStorage, tokenAccountManager)
-            val transactionSyncer = TransactionSyncer(publicKey, rpcApiClient, solscanClient, transactionStorage, transactionManager)
+            val transactionStorage = TransactionStorage(transactionDatabase, addressString)
+            val solscanClient = SolscanClient(httpClient)
+            val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
+            val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, transactionStorage, transactionManager)
 
-            val syncManager = SyncManager(apiSyncer, balanceManager, transactionSyncer, tokenAccountManager)
+            val syncManager = SyncManager(apiSyncer, balanceManager, tokenAccountManager, transactionSyncer, transactionManager)
 
             val kit = SolanaKit(apiSyncer, balanceManager, tokenAccountManager, transactionManager, syncManager, rpcSource, address)
             syncManager.listener = kit

@@ -1,12 +1,11 @@
 package io.horizontalsystems.solanakit.core
 
 import io.horizontalsystems.solanakit.SolanaKit
-import io.horizontalsystems.solanakit.models.FullTransaction
-import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.IApiSyncerListener
 import io.horizontalsystems.solanakit.noderpc.SyncerState
 import io.horizontalsystems.solanakit.transactions.ITransactionListener
+import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -22,9 +21,10 @@ interface ISyncListener {
 class SyncManager(
     private val apiSyncer: ApiSyncer,
     private val balanceSyncer: BalanceManager,
+    private val tokenAccountSyncer: TokenAccountManager,
     private val transactionSyncer: TransactionSyncer,
-    private val tokenAccountSyncer: TokenAccountManager
-) : IApiSyncerListener, IBalanceListener, ITransactionListener, ITokenListener {
+    private val transactionManager: TransactionManager
+) : IApiSyncerListener, IBalanceListener, ITokenAccountListener, ITransactionListener {
 
     private var scope: CoroutineScope? = null
 
@@ -40,6 +40,7 @@ class SyncManager(
         get() = transactionSyncer.syncState
 
     private var started = false
+    private var forceSyncing = false
 
     init {
         balanceSyncer.listener = this
@@ -57,14 +58,27 @@ class SyncManager(
         balanceSyncer.start()
         tokenAccountSyncer.start()
         transactionSyncer.sync()
+
+        scope.launch {
+            transactionManager.transactionsFlow
+                .collect { balanceSyncer.sync() }
+        }
+
+        scope.launch {
+            tokenAccountSyncer.tokenAccountsUpdated
+                .collect { tokenAccountSyncer.sync(it) }
+        }
     }
 
     suspend fun refresh(scope: CoroutineScope) {
+        if (forceSyncing) return
+
         when (apiSyncer.state) {
             SyncerState.Ready -> {
+                forceSyncing = true
                 balanceSyncer.sync()
                 tokenAccountSyncer.sync()
-                apiSyncer.sync()
+                transactionSyncer.sync()
             }
             is SyncerState.NotReady -> {
                 start(scope)
@@ -101,18 +115,21 @@ class SyncManager(
     override fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateTokenSyncState(syncState)
+            checkForceSyncFinished()
         }
     }
 
     override fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateTransactionSyncState(syncState)
+            checkForceSyncFinished()
         }
     }
 
     override fun onUpdateBalanceSyncState(value: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateBalanceSyncState(value)
+            checkForceSyncFinished()
         }
     }
 
@@ -129,17 +146,13 @@ class SyncManager(
         }
     }
 
-    override fun onUpdateTokenBalances(tokenAccounts: List<TokenAccount>) {}
-
-    override fun onUpdateTokenAccounts(tokenAccounts: List<TokenAccount>) {
-        scope?.launch {
-            tokenAccountSyncer.sync(tokenAccounts)
-        }
-    }
-
-    override fun onTransactionsReceived(fullTransactions: List<FullTransaction>) {
-        scope?.launch {
-            balanceSyncer.sync()
+    private fun checkForceSyncFinished() {
+        if (
+            balanceSyncer.syncState is SolanaKit.SyncState.Synced &&
+            tokenAccountSyncer.syncState is SolanaKit.SyncState.Synced &&
+            transactionSyncer.syncState is SolanaKit.SyncState.Synced
+        ) {
+            forceSyncing = false
         }
     }
 

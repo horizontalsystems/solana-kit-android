@@ -15,8 +15,6 @@ import kotlin.coroutines.suspendCoroutine
 
 interface ITransactionListener {
     fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState)
-    fun onUpdateTokenAccounts(tokenAccounts: List<TokenAccount>)
-    fun onTransactionsReceived(fullTransactions: List<FullTransaction>)
 }
 
 class TransactionSyncer(
@@ -50,16 +48,13 @@ class TransactionSyncer(
             val mintAddresses = solscanTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
             val mintAccounts = getMintAccounts(mintAddresses)
 
-            val (fullTransactions, tokenAccounts) = transactionManager.handle(rpcNodeTxs, solscanTxs, mintAccounts)
+            transactionManager.handle(rpcNodeTxs, solscanTxs, mintAccounts)
 
             if (solscanTxs.isNotEmpty()) {
                 storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanTxs.maxOf { it.blockTime }))
             }
 
             syncState = SolanaKit.SyncState.Synced()
-
-            listener?.onTransactionsReceived(fullTransactions)
-            listener?.onUpdateTokenAccounts(tokenAccounts)
         } catch (exception: Throwable) {
             syncState = SolanaKit.SyncState.NotSynced(exception)
         }

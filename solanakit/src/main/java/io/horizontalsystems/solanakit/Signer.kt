@@ -7,15 +7,14 @@ import com.solana.vendor.bip32.wallet.DerivableType
 import com.solana.vendor.bip32.wallet.SolanaBip44
 import io.horizontalsystems.hdwalletkit.Mnemonic
 
-class Signer {
+class Signer(internal val account: Account) {
 
     companion object {
 
         fun getInstance(seed: ByteArray): Signer {
             val account = account(privateKey(seed))
-            val address = account.publicKey.toBase58()
 
-            return Signer()
+            return Signer(account)
         }
 
         fun address(

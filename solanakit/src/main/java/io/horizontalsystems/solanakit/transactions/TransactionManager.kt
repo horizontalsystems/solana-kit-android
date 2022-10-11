@@ -1,21 +1,31 @@
 package io.horizontalsystems.solanakit.transactions
 
+import com.solana.actions.Action
+import com.solana.actions.sendSOL
+import com.solana.actions.sendSPLTokens
+import com.solana.core.Account
+import com.solana.core.PublicKey
+import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import java.math.BigDecimal
+import java.time.Instant
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 class TransactionManager(
-    private val address: String,
+    private val address: Address,
     private val storage: TransactionStorage,
+    private val rpcAction: Action,
     private val tokenAccountManager: TokenAccountManager
 ) {
 
+    private val addressString = address.publicKey.toBase58()
     private val _transactionsFlow = MutableStateFlow<List<FullTransaction>>(listOf())
+    val transactionsFlow: StateFlow<List<FullTransaction>> = _transactionsFlow
 
     fun allTransactionsFlow(incoming: Boolean?): Flow<List<FullTransaction>> = _transactionsFlow.map { txList ->
         val incoming = incoming ?: return@map txList
@@ -45,9 +55,8 @@ class TransactionManager(
     suspend fun getSplTransaction(mintAddress: String, incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> =
         storage.getSplTransactions(mintAddress, incoming, fromHash, limit)
 
-    fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, MintAccount>): Pair<List<FullTransaction>, MutableList<TokenAccount>> {
+    fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, MintAccount>) {
         var tokenAccounts = mutableListOf<TokenAccount>()
-        var fullTransactions = listOf<FullTransaction>()
 
         val tokenTransferTransactions = solscanTxs.filter { it.type == "TokenChange" }
         val solTransfers = solscanTxs
@@ -110,7 +119,7 @@ class TransactionManager(
                 fullTransactionsMap[transaction.hash] = FullTransaction(transaction, fullTransaction.tokenTransfers)
             }
 
-            fullTransactions = fullTransactionsMap.values.toList()
+            val fullTransactions = fullTransactionsMap.values.toList()
 
             if (fullTransactions.isNotEmpty()) {
                 storage.addTransactions(fullTransactions)
@@ -120,10 +129,8 @@ class TransactionManager(
 
         tokenAccounts = tokenAccounts.toSet().toMutableList()
         if (tokenAccounts.isNotEmpty()) {
-            tokenAccountManager.saveAccounts(tokenAccounts)
+            tokenAccountManager.addAccount(tokenAccounts)
         }
-
-        return Pair(fullTransactions, tokenAccounts)
     }
 
     private fun hasSolTransfer(fullTransaction: FullTransaction, incoming: Boolean?): Boolean {
@@ -131,7 +138,7 @@ class TransactionManager(
         val incoming = incoming ?: return true
 
         return amount > BigDecimal.ZERO &&
-                ((incoming && fullTransaction.transaction.to == address) || (!incoming && fullTransaction.transaction.from == address))
+                ((incoming && fullTransaction.transaction.to == addressString) || (!incoming && fullTransaction.transaction.from == addressString))
     }
 
     private fun hasSplTransfer(mintAddress: String, tokenTransfers: List<TokenTransfer>, incoming: Boolean?): Boolean =
@@ -141,5 +148,54 @@ class TransactionManager(
 
             tokenTransfer.incoming == incoming
         }
+
+    suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction = suspendCoroutine { continuation ->
+        rpcAction.sendSOL(signerAccount, toAddress.publicKey, amount) { result ->
+            result.onSuccess { transactionHash ->
+                val fullTransaction = FullTransaction(
+                    Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal().movePointLeft(9)),
+                    listOf()
+                )
+
+                storage.addTransactions(listOf(fullTransaction))
+                continuation.resume(fullTransaction)
+                _transactionsFlow.tryEmit(listOf(fullTransaction))
+            }
+
+            result.onFailure {
+                continuation.resumeWithException(it)
+            }
+        }
+    }
+
+    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: BigDecimal, signerAccount: Account): FullTransaction {
+        val mintAddressString = mintAddress.publicKey.toBase58()
+        val mintAccount = storage.getMintAccount(mintAddressString) ?: throw Exception("MintAccount not found $mintAddressString")
+        val tokenAccount = tokenAccountManager.getTokenAccountByMintAddress(mintAddressString) ?: throw Exception("TokenAccount not found for $mintAddressString")
+
+        return suspendCoroutine { continuation ->
+            rpcAction.sendSPLTokens(
+                mintAddress.publicKey, PublicKey(tokenAccount.address), toAddress.publicKey,
+                amount.movePointRight(mintAccount.decimals).toLong(), true,
+                account = signerAccount
+            ) { result ->
+                result.onSuccess { transactionHash ->
+                    val fullTransaction = FullTransaction(
+                        Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee),
+                        listOf(TokenTransfer(transactionHash, mintAddressString, false, amount))
+                    )
+
+                    storage.addTransactions(listOf(fullTransaction))
+                    continuation.resume(fullTransaction)
+                    _transactionsFlow.tryEmit(listOf(fullTransaction))
+                    tokenAccountManager.addAccount(listOf(tokenAccount))
+                }
+
+                result.onFailure {
+                    continuation.resumeWithException(it)
+                }
+            }
+        }
+    }
 
 }

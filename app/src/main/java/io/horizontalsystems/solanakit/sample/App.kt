@@ -21,8 +21,6 @@ class App : Application() {
             Configuration.rpcSource, Configuration.walletId
         )
 
-        kit.start()
-
         return kit
     }
 

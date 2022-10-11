@@ -91,4 +91,7 @@ class TransactionStorage(
         return transactionsDao.getTransactions(SimpleSQLiteQuery(sqlQuery)).map { it.fullTransaction }
     }
 
+    suspend fun getMintAccount(address: String): MintAccount? =
+        mintAccountDao.get(address)
+
 }

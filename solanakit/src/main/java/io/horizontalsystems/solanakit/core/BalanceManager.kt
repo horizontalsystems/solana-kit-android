@@ -53,7 +53,7 @@ class BalanceManager(
     }
 
     private fun handleBalance(balance: Long) {
-                if (this.balance != balance) {
+        if (this.balance != balance) {
             this.balance = balance
             storage.saveBalance(balance)
             listener?.onUpdateBalance(balance)
