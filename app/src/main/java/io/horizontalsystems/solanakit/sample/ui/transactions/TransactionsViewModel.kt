@@ -21,7 +21,7 @@ class TransactionsViewModel : ViewModel() {
             val txs = App.instance.solanaKit.getAllTransactions().map {
                 """
                     Hash: ${it.transaction.hash}
-                    Date: ${dateFormat.format(Date(it.transaction.blockTime * 1000))}
+                    Date: ${dateFormat.format(Date(it.transaction.timestamp * 1000))}
                 """.trimIndent()
             }
 
@@ -35,7 +35,7 @@ class TransactionsViewModel : ViewModel() {
             val txs = App.instance.solanaKit.getAllTransactions(incoming).map {
                 """
                     Hash: ${it.transaction.hash}
-                    Date: ${dateFormat.format(Date(it.transaction.blockTime * 1000))}
+                    Date: ${dateFormat.format(Date(it.transaction.timestamp * 1000))}
                 """.trimIndent()
             }
 
@@ -48,7 +48,7 @@ class TransactionsViewModel : ViewModel() {
             val txs = App.instance.solanaKit.getSolTransactions(incoming).map {
                 """
                     Hash: ${it.transaction.hash}
-                    Date: ${dateFormat.format(Date(it.transaction.blockTime * 1000))}
+                    Date: ${dateFormat.format(Date(it.transaction.timestamp * 1000))}
                 """.trimIndent()
             }
 
@@ -61,7 +61,7 @@ class TransactionsViewModel : ViewModel() {
             val txs = App.instance.solanaKit.getSplTransactions("AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB", incoming).map {
                 """
                     Hash: ${it.transaction.hash}
-                    Date: ${dateFormat.format(Date(it.transaction.blockTime * 1000))}
+                    Date: ${dateFormat.format(Date(it.transaction.timestamp * 1000))}
                 """.trimIndent()
             }
 

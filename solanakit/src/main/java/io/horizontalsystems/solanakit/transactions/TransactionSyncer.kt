@@ -8,7 +8,9 @@ import com.solana.programs.TokenProgram
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.*
+import io.horizontalsystems.solanakit.noderpc.endpoints.SignatureInfo
 import io.horizontalsystems.solanakit.noderpc.endpoints.getSignaturesForAddress
+import java.math.BigDecimal
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -39,19 +41,21 @@ class TransactionSyncer(
 
         syncState = SolanaKit.SyncState.Syncing()
 
-        val lastTransactionHash = storage.lastTransaction()?.hash
+        val lastTransactionHash = storage.lastNonPendingTransaction()?.hash
         val fromTime = storage.getSyncedBlockTime(solscanClient.sourceName)?.blockTime
 
         try {
-            val rpcNodeTxs = getTransactionsFromRpcNode(lastTransactionHash)
-            val solscanTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
-            val mintAddresses = solscanTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
+            val rpcSignatureInfos = getTransactionsFromRpcNode(lastTransactionHash)
+            val solscanExportedTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
+            val mintAddresses = solscanExportedTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
             val mintAccounts = getMintAccounts(mintAddresses)
+            val tokenAccounts = getTokenAccounts(solscanExportedTxs, mintAccounts.groupBy { it.address })
+            val transactions = merge(rpcSignatureInfos, solscanExportedTxs)
 
-            transactionManager.handle(rpcNodeTxs, solscanTxs, mintAccounts)
+            transactionManager.handle(transactions, mintAccounts, tokenAccounts)
 
-            if (solscanTxs.isNotEmpty()) {
-                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanTxs.maxOf { it.blockTime }))
+            if (solscanExportedTxs.isNotEmpty()) {
+                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanExportedTxs.maxOf { it.blockTime }))
             }
 
             syncState = SolanaKit.SyncState.Synced()
@@ -60,19 +64,50 @@ class TransactionSyncer(
         }
     }
 
+    private fun merge(rpcSignatureInfos: List<SignatureInfo>, solscanExportedTxs: List<SolscanExportedTransaction>): List<FullTransaction> {
+        val transactions = mutableMapOf<String, FullTransaction>()
+
+        for (signatureInfo in rpcSignatureInfos) {
+            signatureInfo.signature?.let { signature ->
+                signatureInfo.blockTime?.let { blockTime ->
+                    val transaction = Transaction(signature, blockTime, error = signatureInfo.err?.toString())
+                    transactions[signature] = FullTransaction(transaction, listOf())
+                }
+            }
+        }
+
+        for ((hash, solscanTxs) in solscanExportedTxs.groupBy { it.hash }) {
+            val existingTransaction = transactions[hash]?.transaction
+            val solscanTx = solscanTxs.first()
+
+            val mergedTransaction = Transaction(
+                hash,
+                existingTransaction?.timestamp ?: solscanTx.blockTime,
+                solscanTx.fee.toBigDecimal(),
+                solscanTx.solTransferSource,
+                solscanTx.solTransferDestination,
+                solscanTx.solAmount?.toBigDecimal(),
+                existingTransaction?.error
+            )
+
+            val tokenTransfers: List<TokenTransfer> = solscanTxs.mapNotNull { solscanTx ->
+                val mintAddress = solscanTx.mintAccountAddress ?: return@mapNotNull null
+                val amount = solscanTx.splBalanceChange?.toBigDecimal() ?: return@mapNotNull null
+
+                TokenTransfer(hash, mintAddress, amount > BigDecimal.ZERO, amount)
+            }
+
+            transactions[hash] = FullTransaction(mergedTransaction, tokenTransfers)
+        }
+
+        return transactions.values.toList()
+    }
+
     // TODO: this method must retrieve recursively
-    private suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<Transaction>> { continuation ->
+    private suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<SignatureInfo>> { continuation ->
         rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash) { result ->
             result.onSuccess { signatureObjects ->
-                val transactions = signatureObjects.mapNotNull { signatureObject ->
-                    signatureObject.signature?.let { signature ->
-                        signatureObject.blockTime?.let { blockTime ->
-                            Transaction(signature, blockTime)
-                        }
-                    }
-                }
-
-                continuation.resume(transactions)
+                continuation.resume(signatureObjects)
             }
 
             result.onFailure { exception ->
@@ -93,15 +128,23 @@ class TransactionSyncer(
         }
     }
 
-    private suspend fun getMintAccounts(mintAddresses: List<String>) = suspendCoroutine<Map<String, MintAccount>> { continuation ->
+    private fun getTokenAccounts(solscanExportedTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, List<MintAccount>>): List<TokenAccount> =
+        solscanExportedTxs.mapNotNull { solscanTx ->
+            val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[it]?.firstOrNull() } ?: return@mapNotNull null
+            val tokenAccountAddress = solscanTx.tokenAccountAddress ?: return@mapNotNull null
+
+            TokenAccount(tokenAccountAddress, mintAccount.address, BigDecimal.ZERO, mintAccount.decimals)
+        }.toSet().toMutableList()
+
+    private suspend fun getMintAccounts(mintAddresses: List<String>) = suspendCoroutine<List<MintAccount>> { continuation ->
         if (mintAddresses.isEmpty()) {
-            continuation.resume(mapOf())
+            continuation.resume(listOf())
             return@suspendCoroutine
         }
 
         rpcClient.getMultipleAccounts(mintAddresses.map { PublicKey.valueOf(it) }, Mint::class.java) { result ->
             result.onSuccess { mintDataList ->
-                val mintAccounts = mutableMapOf<String, MintAccount>()
+                val mintAccounts = mutableListOf<MintAccount>()
 
                 for ((index, mintAddress) in mintAddresses.withIndex()) {
                     mintDataList[index]?.let { account ->
@@ -109,7 +152,7 @@ class TransactionSyncer(
                         val mint = account.data?.value
 
                         if (owner != tokenProgramId || mint == null) return@let
-                        mintAccounts[mintAddress] = MintAccount(mintAddress, mint.supply, mint.decimals)
+                        mintAccounts.add(MintAccount(mintAddress, mint.supply, mint.decimals))
                     }
                 }
 

@@ -15,6 +15,9 @@ interface TokenAccountDao {
     @Query("SELECT * FROM TokenAccount WHERE mintAddress=:mintAddress LIMIT 1")
     fun get(mintAddress: String): TokenAccount?
 
+    @Query("SELECT * FROM TokenAccount WHERE mintAddress IN (:mintAddresses)")
+    fun get(mintAddresses: List<String>): List<TokenAccount>
+
     @Query("SELECT * FROM TokenAccount")
     fun getAll(): List<TokenAccount>
 

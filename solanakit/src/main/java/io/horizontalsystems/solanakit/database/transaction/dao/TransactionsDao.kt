@@ -12,10 +12,10 @@ interface TransactionsDao {
     @Query("SELECT * FROM `Transaction` WHERE hash = :transactionHash LIMIT 1")
     fun get(transactionHash: String) : Transaction?
 
-    @Query("SELECT * FROM `Transaction` ORDER BY blockTime DESC LIMIT 1")
-    fun lastTransaction() : Transaction?
+    @Query("SELECT * FROM `Transaction` WHERE NOT pending ORDER BY timestamp DESC LIMIT 1")
+    fun lastNonPendingTransaction() : Transaction?
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTransactions(transactions: List<Transaction>)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)

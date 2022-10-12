@@ -52,8 +52,6 @@ class TokenAccountManager(
     }
 
     fun sync(tokenAccounts: List<TokenAccount>? = null) {
-        if (tokenAccounts != null && tokenAccounts.isNotEmpty()) storage.saveTokenAccounts(tokenAccounts)
-
         syncState = SolanaKit.SyncState.Syncing()
 
         val tokenAccounts = tokenAccounts ?: storage.getTokenAccounts()
@@ -70,9 +68,11 @@ class TokenAccountManager(
         }
     }
 
-    fun addAccount(tokenAccounts: List<TokenAccount>) {
+    fun addAccount(tokenAccounts: List<TokenAccount>, mintAddresses: List<String>) {
         storage.saveTokenAccounts(tokenAccounts)
-        _tokenAccountsUpdated.tryEmit(tokenAccounts)
+
+        val tokenAccountUpdated: List<TokenAccount> = storage.getTokenAccounts(mintAddresses) + tokenAccounts
+        _tokenAccountsUpdated.tryEmit(tokenAccountUpdated.toSet().toList())
     }
 
     fun getTokenAccountByMintAddress(mintAddress: String): TokenAccount? =

@@ -8,10 +8,11 @@ import java.math.BigDecimal
 class Transaction(
     @PrimaryKey
     val hash: String,
-    val blockTime: Long,
-
+    val timestamp: Long,
     val fee: BigDecimal? = null,
     val from: String? = null,
     val to: String? = null,
-    val amount: BigDecimal? = null
+    val amount: BigDecimal? = null,
+    val error: String? = null,
+    val pending: Boolean = false
 )

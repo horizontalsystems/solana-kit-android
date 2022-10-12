@@ -28,8 +28,9 @@ class MainStorage(
         database.tokenAccountsDao().insert(tokenAccounts)
     }
 
-    fun getTokenAccounts(): List<TokenAccount> =
-        database.tokenAccountsDao().getAll()
+    fun getTokenAccounts(mintAddresses: List<String>? = null): List<TokenAccount> =
+        if (mintAddresses == null) database.tokenAccountsDao().getAll()
+        else database.tokenAccountsDao().get(mintAddresses)
 
     fun getTokenAccount(mintAddress: String): TokenAccount? =
         database.tokenAccountsDao().get(mintAddress)

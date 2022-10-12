@@ -18,8 +18,8 @@ class TransactionStorage(
         syncerStateDao.save(syncBlockTime)
     }
 
-    fun lastTransaction(): Transaction? =
-        transactionsDao.lastTransaction()
+    fun lastNonPendingTransaction(): Transaction? =
+        transactionsDao.lastNonPendingTransaction()
 
     fun addTransactions(transactions: List<FullTransaction>) {
         transactionsDao.insertTransactions(transactions.map { it.transaction })
@@ -64,9 +64,9 @@ class TransactionStorage(
         fromHash?.let { transactionsDao.get(it) }?.let { fromTransaction ->
             val fromCondition = """
                            (
-                                tx.blockTime < ${fromTransaction.blockTime} OR
+                                tx.timestamp < ${fromTransaction.timestamp} OR
                                 (
-                                    tx.blockTime = ${fromTransaction.blockTime} AND
+                                    tx.timestamp = ${fromTransaction.timestamp} AND
                                     HEX(tx.hash) < "${fromTransaction.hash}"
                                 )
                            )
@@ -76,7 +76,7 @@ class TransactionStorage(
         }
 
         val whereClause = if (whereConditions.isNotEmpty()) "WHERE ${whereConditions.joinToString(" AND ")}" else ""
-        val orderClause = "ORDER BY tx.blockTime DESC, HEX(tx.hash) DESC"
+        val orderClause = "ORDER BY tx.timestamp DESC, HEX(tx.hash) DESC"
         val limitClause = limit?.let { "LIMIT $limit" } ?: ""
 
         val sqlQuery = """
@@ -93,5 +93,16 @@ class TransactionStorage(
 
     suspend fun getMintAccount(address: String): MintAccount? =
         mintAccountDao.get(address)
+
+    suspend fun getFullTransactions(hashes: List<String>): List<FullTransaction> {
+        val sqlQuery = """
+                      SELECT tx.*
+                      FROM `Transaction` AS tx
+                      LEFT JOIN TokenTransfer AS tt ON tx.hash = tt.transactionHash
+                      WHERE tx.hash IN (${hashes.joinToString(", ", "'", "'")})
+                      """
+
+        return transactionsDao.getTransactions(SimpleSQLiteQuery(sqlQuery)).map { it.fullTransaction }
+    }
 
 }

@@ -55,81 +55,51 @@ class TransactionManager(
     suspend fun getSplTransaction(mintAddress: String, incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> =
         storage.getSplTransactions(mintAddress, incoming, fromHash, limit)
 
-    fun handle(rpcNodeTxs: List<Transaction>, solscanTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, MintAccount>) {
-        var tokenAccounts = mutableListOf<TokenAccount>()
-
-        val tokenTransferTransactions = solscanTxs.filter { it.type == "TokenChange" }
-        val solTransfers = solscanTxs
-            .filter { it.type == "SolTransfer" }
-            .map { solscanTx ->
-                Transaction(
-                    solscanTx.hash,
-                    solscanTx.blockTime,
-                    solscanTx.fee.toBigDecimal(),
-                    solscanTx.solTransferSource,
-                    solscanTx.solTransferDestination,
-                    solscanTx.solAmount?.toBigDecimal()
-                )
-            }
-
+    suspend fun handle(syncedTransactions: List<FullTransaction>, mintAccounts: List<MintAccount>, syncedTokenAccounts: List<TokenAccount>) {
         if (mintAccounts.isNotEmpty()) {
-            storage.addMintAccounts(mintAccounts.values.toList())
+            storage.addMintAccounts(mintAccounts)
         }
 
-        val splTransferTransactions = tokenTransferTransactions
-            .groupBy { it.hash }
-            .map { entry ->
-                val firstTransfer = entry.value.first()
-                val transaction = Transaction(
-                    entry.key,
-                    firstTransfer.blockTime,
-                    firstTransfer.fee.toBigDecimal()
-                )
+        val mintAddresses = mutableListOf<String>()
 
-                val tokenTransfers: List<TokenTransfer> = entry.value.mapNotNull { solscanTx ->
-                    val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[it] } ?: return@mapNotNull null
-                    val tokenAccountAddress = solscanTx.tokenAccountAddress
-                    val amount = solscanTx.splBalanceChange?.toBigDecimal()
-                    val balance = solscanTx.postBalance?.toBigDecimal()?.movePointRight(mintAccount.decimals)
+        if (syncedTransactions.isNotEmpty()) {
+            val existingTransactionsMap = storage.getFullTransactions(syncedTransactions.map { it.transaction.hash }).groupBy { it.transaction.hash }
+            val transactions = syncedTransactions.map { syncedTx ->
+                val existingTx = existingTransactionsMap[syncedTx.transaction.hash]?.firstOrNull()
 
-                    if (tokenAccountAddress == null || amount == null || balance == null) {
-                        return@mapNotNull null
-                    }
+                if (existingTx == null) syncedTx
+                else {
+                    val syncedTxHeader = syncedTx.transaction
+                    val existingTxHeader = existingTx.transaction
 
-                    tokenAccounts.add(TokenAccount(tokenAccountAddress, mintAccount.address, balance, mintAccount.decimals))
-                    TokenTransfer(entry.key, mintAccount.address, amount > BigDecimal.ZERO, amount)
+                    FullTransaction(
+                        transaction = Transaction(
+                            hash = syncedTxHeader.hash,
+                            timestamp = syncedTxHeader.timestamp,
+                            fee = syncedTxHeader.fee,
+                            from = existingTxHeader.from ?: syncedTxHeader.from,
+                            to = existingTxHeader.to ?: syncedTxHeader.to,
+                            amount = existingTxHeader.amount ?: syncedTxHeader.amount,
+                            error = syncedTxHeader.error,
+                            pending = false
+                        ),
+                        tokenTransfers = syncedTx.tokenTransfers.ifEmpty {
+                            for (tokenTransfer in existingTx.tokenTransfers) {
+                                mintAddresses.add(tokenTransfer.mintAddress)
+                            }
+
+                            existingTx.tokenTransfers
+                        }
+                    )
                 }
-
-                FullTransaction(transaction, tokenTransfers)
             }
 
-        if (solTransfers.isNotEmpty() || splTransferTransactions.isNotEmpty() || rpcNodeTxs.isNotEmpty()) {
-            val fullTransactionsMap: MutableMap<String, FullTransaction> = mutableMapOf()
-
-            for (transaction in rpcNodeTxs) {
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
-            }
-
-            for (transaction in solTransfers) {
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, listOf())
-            }
-
-            for (fullTransaction in splTransferTransactions) {
-                val transaction = fullTransactionsMap[fullTransaction.transaction.hash]?.transaction ?: fullTransaction.transaction
-                fullTransactionsMap[transaction.hash] = FullTransaction(transaction, fullTransaction.tokenTransfers)
-            }
-
-            val fullTransactions = fullTransactionsMap.values.toList()
-
-            if (fullTransactions.isNotEmpty()) {
-                storage.addTransactions(fullTransactions)
-                _transactionsFlow.tryEmit(fullTransactions)
-            }
+            storage.addTransactions(transactions)
+            _transactionsFlow.tryEmit(transactions)
         }
 
-        tokenAccounts = tokenAccounts.toSet().toMutableList()
-        if (tokenAccounts.isNotEmpty()) {
-            tokenAccountManager.addAccount(tokenAccounts)
+        if (syncedTokenAccounts.isNotEmpty() || mintAddresses.isNotEmpty()) {
+            tokenAccountManager.addAccount(syncedTokenAccounts.toSet().toList(), mintAddresses.toSet().toList())
         }
     }
 
@@ -153,7 +123,11 @@ class TransactionManager(
         rpcAction.sendSOL(signerAccount, toAddress.publicKey, amount) { result ->
             result.onSuccess { transactionHash ->
                 val fullTransaction = FullTransaction(
-                    Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal().movePointLeft(9)),
+                    Transaction(
+                        transactionHash, Instant.now().epochSecond, SolanaKit.fee,
+                        addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal().movePointLeft(9),
+                        pending = true
+                    ),
                     listOf()
                 )
 
@@ -181,14 +155,13 @@ class TransactionManager(
             ) { result ->
                 result.onSuccess { transactionHash ->
                     val fullTransaction = FullTransaction(
-                        Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee),
+                        Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, pending = true),
                         listOf(TokenTransfer(transactionHash, mintAddressString, false, amount))
                     )
 
                     storage.addTransactions(listOf(fullTransaction))
                     continuation.resume(fullTransaction)
                     _transactionsFlow.tryEmit(listOf(fullTransaction))
-                    tokenAccountManager.addAccount(listOf(tokenAccount))
                 }
 
                 result.onFailure {
