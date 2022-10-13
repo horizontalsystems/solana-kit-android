@@ -18,7 +18,7 @@ class App : Application() {
 
         val kit = SolanaKit.getInstance(
             instance, address,
-            Configuration.rpcSource, Configuration.walletId
+            Configuration.rpcSource, Configuration.walletId, true
         )
 
         return kit

@@ -45,7 +45,7 @@ class TransactionSyncer(
         val fromTime = storage.getSyncedBlockTime(solscanClient.sourceName)?.blockTime
 
         try {
-            val rpcSignatureInfos = getTransactionsFromRpcNode(lastTransactionHash)
+            val rpcSignatureInfos = getSignaturesFromRpcNode(lastTransactionHash)
             val solscanExportedTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
             val mintAddresses = solscanExportedTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
             val mintAccounts = getMintAccounts(mintAddresses)
@@ -103,9 +103,22 @@ class TransactionSyncer(
         return transactions.values.toList()
     }
 
-    // TODO: this method must retrieve recursively
-    private suspend fun getTransactionsFromRpcNode(lastTransactionHash: String?) = suspendCoroutine<List<SignatureInfo>> { continuation ->
-        rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash) { result ->
+    private suspend fun getSignaturesFromRpcNode(lastTransactionHash: String?): List<SignatureInfo> {
+        val signatureObjects = mutableListOf<SignatureInfo>()
+        var signatureObjectsChunk = listOf<SignatureInfo>()
+
+        do {
+            val lastSignature = signatureObjectsChunk.lastOrNull()?.signature
+            signatureObjectsChunk = getSignaturesChunk(lastTransactionHash, lastSignature)
+            signatureObjects.addAll(signatureObjectsChunk)
+
+        } while (signatureObjectsChunk.size == rpcSignaturesCount)
+
+        return signatureObjects
+    }
+
+    private suspend fun getSignaturesChunk(lastTransactionHash: String?, before: String? = null) = suspendCoroutine<List<SignatureInfo>> { continuation ->
+        rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash, before = before, limit = rpcSignaturesCount) { result ->
             result.onSuccess { signatureObjects ->
                 continuation.resume(signatureObjects)
             }
@@ -167,6 +180,7 @@ class TransactionSyncer(
 
     companion object {
         val tokenProgramId = TokenProgram.PROGRAM_ID.toBase58()
+        const val rpcSignaturesCount = 1000
     }
 
 }

@@ -189,9 +189,10 @@ class SolanaKit(
             application: Application,
             addressString: String,
             rpcSource: RpcSource,
-            walletId: String
+            walletId: String,
+            debug: Boolean = false
         ): SolanaKit {
-            val httpClient = loggingHttpClient()
+            val httpClient = httpClient(debug)
             val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient)
             val connectionManager = ConnectionManager(application)
 
@@ -224,14 +225,17 @@ class SolanaKit(
             SolanaDatabaseManager.clear(context, walletId)
         }
 
-        private fun loggingHttpClient(): OkHttpClient {
-            val consoleLogger = HttpLoggingInterceptor.Logger { message -> println(message) }
+        private fun httpClient(debug: Boolean): OkHttpClient =
+            if (debug) {
+                val consoleLogger = HttpLoggingInterceptor.Logger { message -> println(message) }
 
-            val logging = HttpLoggingInterceptor(consoleLogger)
-            logging.level = HttpLoggingInterceptor.Level.BODY
+                val logging = HttpLoggingInterceptor(consoleLogger)
+                logging.level = HttpLoggingInterceptor.Level.BODY
 
-            return OkHttpClient.Builder().addInterceptor(logging).build()
-        }
+                OkHttpClient.Builder().addInterceptor(logging).build()
+            } else {
+                OkHttpClient()
+            }
 
     }
 
