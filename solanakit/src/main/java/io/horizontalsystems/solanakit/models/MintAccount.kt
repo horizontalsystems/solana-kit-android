@@ -8,9 +8,10 @@ class MintAccount(
     @PrimaryKey
     val address: String,
     val supply: Long,
-    val decimals: Int
-) {
-
-    var isNft: Boolean = (supply == 1L)
-
-}
+    val decimals: Int,
+    val isNft: Boolean = false,
+    val name: String? = null,
+    val symbol: String? = null,
+    val uri: String? = null,
+    val collectionAddress: String? = null
+)

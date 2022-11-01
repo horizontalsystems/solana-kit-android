@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
         TokenTransfer::class,
         Transaction::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)

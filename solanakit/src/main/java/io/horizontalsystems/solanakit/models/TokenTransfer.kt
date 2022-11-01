@@ -1,9 +1,6 @@
 package io.horizontalsystems.solanakit.models
 
-import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Index
-import androidx.room.PrimaryKey
+import androidx.room.*
 import java.math.BigDecimal
 
 @Entity(

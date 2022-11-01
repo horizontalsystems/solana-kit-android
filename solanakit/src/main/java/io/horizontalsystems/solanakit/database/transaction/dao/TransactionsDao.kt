@@ -2,8 +2,7 @@ package io.horizontalsystems.solanakit.database.transaction.dao
 
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteQuery
-import io.horizontalsystems.solanakit.models.FullTransaction
-import io.horizontalsystems.solanakit.models.TokenTransfer
+import io.horizontalsystems.solanakit.models.*
 import io.horizontalsystems.solanakit.models.Transaction
 
 @Dao
@@ -33,14 +32,27 @@ interface TransactionsDao {
             parentColumn = "hash",
             entityColumn = "transactionHash"
         )
-        val tokenTransfers: List<TokenTransfer>
+        val tokenTransfersWithMintAccounts: List<TokenTransferAndMintAccount>
     ) {
 
         val fullTransaction: FullTransaction
-            get() = FullTransaction(
-                transaction,
-                tokenTransfers
-            )
+            get() = FullTransaction(transaction, tokenTransfersWithMintAccounts.map { it.fullTokenTransfer })
+
+    }
+
+    data class TokenTransferAndMintAccount(
+        @Embedded
+        val tokenTransfer: TokenTransfer,
+
+        @Relation(
+            parentColumn = "mintAddress",
+            entityColumn = "address"
+        )
+        val mintAccount: MintAccount
+    ) {
+
+        val fullTokenTransfer: FullTokenTransfer
+            get() = FullTokenTransfer(tokenTransfer, mintAccount)
 
     }
 

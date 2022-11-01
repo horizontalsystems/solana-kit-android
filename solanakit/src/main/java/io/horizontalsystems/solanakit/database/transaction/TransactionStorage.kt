@@ -23,11 +23,10 @@ class TransactionStorage(
 
     fun addTransactions(transactions: List<FullTransaction>) {
         transactionsDao.insertTransactions(transactions.map { it.transaction })
-        transactionsDao.insertTokenTransfers(transactions.map { it.tokenTransfers }.flatten())
-    }
 
-    fun addMintAccounts(accounts: List<MintAccount>) {
-        mintAccountDao.insert(accounts)
+        val fullTokenTransfers = transactions.map { it.tokenTransfers }.flatten()
+        transactionsDao.insertTokenTransfers(fullTokenTransfers.map { it.tokenTransfer })
+        mintAccountDao.insert(fullTokenTransfers.map { it.mintAccount }.toSet().toList())
     }
 
     suspend fun getTransactions(incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> {

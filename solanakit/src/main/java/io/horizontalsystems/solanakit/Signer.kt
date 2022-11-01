@@ -1,7 +1,6 @@
 package io.horizontalsystems.solanakit
 
 import com.solana.core.Account
-import com.solana.core.HotAccount
 import com.solana.vendor.TweetNaclFast
 import com.solana.vendor.bip32.wallet.DerivableType
 import com.solana.vendor.bip32.wallet.SolanaBip44
@@ -45,7 +44,7 @@ class Signer(internal val account: Account) {
         }
 
         private fun account(privateKey: ByteArray): Account {
-            return HotAccount(privateKey)
+            return Account(privateKey)
         }
 
     }

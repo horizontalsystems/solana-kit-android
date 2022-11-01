@@ -2,10 +2,12 @@ package io.horizontalsystems.solanakit
 
 import android.app.Application
 import android.content.Context
+import com.metaplex.lib.drivers.rpc.JdkRpcDriver
+import com.metaplex.lib.drivers.solana.SolanaConnectionDriver
 import com.solana.actions.Action
 import com.solana.api.Api
 import com.solana.networking.Network
-import com.solana.networking.OkHttpNetworkingRouter
+import com.solana.networking.NetworkingRouter
 import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
@@ -14,6 +16,7 @@ import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
+import io.horizontalsystems.solanakit.noderpc.NftClient
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
@@ -193,13 +196,14 @@ class SolanaKit(
             debug: Boolean = false
         ): SolanaKit {
             val httpClient = httpClient(debug)
-            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient)
+            val router = NetworkingRouter(rpcSource.endpoint, httpClient)
             val connectionManager = ConnectionManager(application)
 
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
             val mainStorage = MainStorage(mainDatabase)
 
             val rpcApiClient = Api(router)
+            val nftClient = NftClient(SolanaConnectionDriver(JdkRpcDriver(rpcSource.endpoint.url)))
             val rpcAction = Action(rpcApiClient, listOf())
             val apiSyncer = ApiSyncer(rpcApiClient, rpcSource.syncInterval, connectionManager, mainStorage)
             val address = Address(addressString)
@@ -211,7 +215,7 @@ class SolanaKit(
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
             val solscanClient = SolscanClient(httpClient)
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
-            val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, transactionStorage, transactionManager)
+            val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, nftClient, transactionStorage, transactionManager)
 
             val syncManager = SyncManager(apiSyncer, balanceManager, tokenAccountManager, transactionSyncer, transactionManager)
 

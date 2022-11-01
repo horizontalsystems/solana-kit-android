@@ -68,10 +68,10 @@ class TokenAccountManager(
         }
     }
 
-    fun addAccount(tokenAccounts: List<TokenAccount>, mintAddresses: List<String>) {
-        storage.saveTokenAccounts(tokenAccounts)
+    fun addAccount(receivedTokenAccounts: List<TokenAccount>, existingMintAddresses: List<String>) {
+        storage.saveTokenAccounts(receivedTokenAccounts)
 
-        val tokenAccountUpdated: List<TokenAccount> = storage.getTokenAccounts(mintAddresses) + tokenAccounts
+        val tokenAccountUpdated: List<TokenAccount> = storage.getTokenAccounts(existingMintAddresses) + receivedTokenAccounts
         _tokenAccountsUpdated.tryEmit(tokenAccountUpdated.toSet().toList())
     }
 
