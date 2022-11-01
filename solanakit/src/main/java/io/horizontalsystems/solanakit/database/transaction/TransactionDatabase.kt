@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 
 @Database(
     entities = [
-        SyncedBlockTime::class,
+        LastSyncedTransaction::class,
         MintAccount::class,
         TokenTransfer::class,
         Transaction::class

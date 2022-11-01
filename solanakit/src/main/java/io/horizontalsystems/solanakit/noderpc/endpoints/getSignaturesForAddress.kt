@@ -34,7 +34,7 @@ fun Api.getSignaturesForAddress(
 data class SignatureInfo(
     var err: Any?,
     val memo: Any?,
-    val signature: String?,
+    val signature: String,
     val slot: Long?,
     val blockTime: Long?
 )

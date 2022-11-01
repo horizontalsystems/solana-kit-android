@@ -11,10 +11,10 @@ class TransactionStorage(
     private val transactionsDao = database.transactionsDao()
     private val mintAccountDao = database.mintAccountDao()
 
-    fun getSyncedBlockTime(syncerId: String): SyncedBlockTime? =
+    fun getSyncedBlockTime(syncerId: String): LastSyncedTransaction? =
         syncerStateDao.get(syncerId)
 
-    fun setSyncedBlockTime(syncBlockTime: SyncedBlockTime) {
+    fun setSyncedBlockTime(syncBlockTime: LastSyncedTransaction) {
         syncerStateDao.save(syncBlockTime)
     }
 

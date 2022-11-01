@@ -4,4 +4,4 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity
-class SyncedBlockTime(@PrimaryKey var syncSourceName: String, val blockTime: Long)
+class LastSyncedTransaction(@PrimaryKey var syncSourceName: String, val hash: String)

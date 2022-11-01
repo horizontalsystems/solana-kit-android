@@ -48,11 +48,12 @@ class TransactionSyncer(
         syncState = SolanaKit.SyncState.Syncing()
 
         val lastTransactionHash = storage.lastNonPendingTransaction()?.hash
-        val fromTime = storage.getSyncedBlockTime(solscanClient.sourceName)?.blockTime
 
         try {
             val rpcSignatureInfos = getSignaturesFromRpcNode(lastTransactionHash)
-            val solscanExportedTxs = getTransactionsFromSolscan(fromTime?.plus(1L))
+            val solTransfers = solscanClient.solTransfers(publicKey.toBase58(), storage.getSyncedBlockTime(solscanClient.solSyncSourceName)?.hash)
+            val splTransfers = solscanClient.splTransfers(publicKey.toBase58(), storage.getSyncedBlockTime(solscanClient.splSyncSourceName)?.hash)
+            val solscanExportedTxs = (solTransfers + splTransfers).sortedByDescending { it.blockTime }
             val mintAddresses = solscanExportedTxs.mapNotNull { it.mintAccountAddress }.toSet().toList()
             val mintAccounts = getMintAccounts(mintAddresses)
             val tokenAccounts = buildTokenAccounts(solscanExportedTxs, mintAccounts)
@@ -60,8 +61,12 @@ class TransactionSyncer(
 
             transactionManager.handle(transactions, tokenAccounts)
 
-            if (solscanExportedTxs.isNotEmpty()) {
-                storage.setSyncedBlockTime(SyncedBlockTime(solscanClient.sourceName, solscanExportedTxs.maxOf { it.blockTime }))
+            if (solTransfers.isNotEmpty()) {
+                storage.setSyncedBlockTime(LastSyncedTransaction(solscanClient.solSyncSourceName, solTransfers.first().hash))
+            }
+
+            if (splTransfers.isNotEmpty()) {
+                storage.setSyncedBlockTime(LastSyncedTransaction(solscanClient.splSyncSourceName, splTransfers.first().hash))
             }
 
             syncState = SolanaKit.SyncState.Synced()
@@ -70,19 +75,17 @@ class TransactionSyncer(
         }
     }
 
-    private fun merge(rpcSignatureInfos: List<SignatureInfo>, solscanExportedTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, MintAccount>): List<FullTransaction> {
+    private fun merge(rpcSignatureInfos: List<SignatureInfo>, solscanTxsMap: List<SolscanTransaction>, mintAccounts: Map<String, MintAccount>): List<FullTransaction> {
         val transactions = mutableMapOf<String, FullTransaction>()
 
         for (signatureInfo in rpcSignatureInfos) {
-            signatureInfo.signature?.let { signature ->
-                signatureInfo.blockTime?.let { blockTime ->
-                    val transaction = Transaction(signature, blockTime, error = signatureInfo.err?.toString())
-                    transactions[signature] = FullTransaction(transaction, listOf())
-                }
+            signatureInfo.blockTime?.let { blockTime ->
+                val transaction = Transaction(signatureInfo.signature, blockTime, error = signatureInfo.err?.toString())
+                transactions[signatureInfo.signature] = FullTransaction(transaction, listOf())
             }
         }
 
-        for ((hash, solscanTxs) in solscanExportedTxs.groupBy { it.hash }) {
+        for ((hash, solscanTxs) in solscanTxsMap.groupBy { it.hash }) {
             val existingTransaction = transactions[hash]?.transaction
             val solscanTx = solscanTxs.first()
 
@@ -135,18 +138,6 @@ class TransactionSyncer(
 
             result.onFailure { exception ->
                 continuation.resumeWithException(exception)
-            }
-        }
-    }
-
-    private suspend fun getTransactionsFromSolscan(fromTime: Long?) = suspendCoroutine<List<SolscanExportedTransaction>> { continuation ->
-        solscanClient.transactions(publicKey.toBase58(), fromTime) { result ->
-            result.onSuccess { solscanTxs ->
-                continuation.resume(solscanTxs)
-            }
-
-            result.onFailure {
-                continuation.resumeWithException(it)
             }
         }
     }
@@ -219,7 +210,7 @@ class TransactionSyncer(
         return mintAccounts
     }
 
-    private fun buildTokenAccounts(solscanExportedTxs: List<SolscanExportedTransaction>, mintAccounts: Map<String, MintAccount>): List<TokenAccount> =
+    private fun buildTokenAccounts(solscanExportedTxs: List<SolscanTransaction>, mintAccounts: Map<String, MintAccount>): List<TokenAccount> =
         solscanExportedTxs.mapNotNull { solscanTx ->
             val mintAccount = solscanTx.mintAccountAddress?.let { mintAccounts[it] } ?: return@mapNotNull null
             val tokenAccountAddress = solscanTx.tokenAccountAddress ?: return@mapNotNull null
