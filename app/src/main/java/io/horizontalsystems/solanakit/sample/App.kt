@@ -1,6 +1,7 @@
 package io.horizontalsystems.solanakit.sample
 
 import android.app.Application
+import io.horizontalsystems.hdwalletkit.Mnemonic
 import io.horizontalsystems.solanakit.Signer
 import io.horizontalsystems.solanakit.SolanaKit
 
@@ -14,7 +15,8 @@ class App : Application() {
 
     private fun createKit(): SolanaKit {
         val words = Configuration.defaultsWords.split(" ")
-        val address = Signer.address(words, "")
+        val seed = Mnemonic().toSeed(words, "")
+        val address = Signer.address(seed)
 
         val kit = SolanaKit.getInstance(
             instance, address,

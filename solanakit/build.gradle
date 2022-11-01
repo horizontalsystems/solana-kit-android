@@ -60,8 +60,6 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.9.3'
     implementation 'com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.10'
 
-    implementation 'com.github.horizontalsystems:hd-wallet-kit-android:f64354d'
-
     implementation "androidx.room:room-runtime:$room_version"
     implementation "androidx.room:room-ktx:$room_version"
     kapt "androidx.room:room-compiler:$room_version"

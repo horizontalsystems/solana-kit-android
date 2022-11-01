@@ -4,7 +4,6 @@ import com.solana.core.Account
 import com.solana.vendor.TweetNaclFast
 import com.solana.vendor.bip32.wallet.DerivableType
 import com.solana.vendor.bip32.wallet.SolanaBip44
-import io.horizontalsystems.hdwalletkit.Mnemonic
 
 class Signer(internal val account: Account) {
 
@@ -16,24 +15,9 @@ class Signer(internal val account: Account) {
             return Signer(account)
         }
 
-        fun address(
-            words: List<String>,
-            passphrase: String = ""
-        ): String {
-            val account = account(privateKey(Mnemonic().toSeed(words, passphrase)))
-            return account.publicKey.toBase58()
-        }
-
         fun address(seed: ByteArray): String {
             val account = account(privateKey(seed))
             return account.publicKey.toBase58()
-        }
-
-        fun privateKey(
-            words: List<String>,
-            passphrase: String = ""
-        ): ByteArray {
-            return privateKey(Mnemonic().toSeed(words, passphrase))
         }
 
         fun privateKey(seed: ByteArray): ByteArray {
