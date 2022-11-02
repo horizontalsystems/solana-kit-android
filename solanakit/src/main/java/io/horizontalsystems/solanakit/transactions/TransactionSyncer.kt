@@ -71,6 +71,7 @@ class TransactionSyncer(
 
             syncState = SolanaKit.SyncState.Synced()
         } catch (exception: Throwable) {
+            throw exception
             syncState = SolanaKit.SyncState.NotSynced(exception)
         }
     }

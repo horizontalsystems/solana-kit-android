@@ -8,22 +8,23 @@ import io.horizontalsystems.solanakit.SolanaKit
 class App : Application() {
 
     lateinit var solanaKit: SolanaKit
+    lateinit var signer: Signer
 
     fun init() {
-        solanaKit = createKit()
+        assignKitClasses()
     }
 
-    private fun createKit(): SolanaKit {
+    private fun assignKitClasses() {
         val words = Configuration.defaultsWords.split(" ")
         val seed = Mnemonic().toSeed(words, "")
         val address = Signer.address(seed)
 
-        val kit = SolanaKit.getInstance(
+        solanaKit = SolanaKit.getInstance(
             instance, address,
             Configuration.rpcSource, Configuration.walletId, true
         )
 
-        return kit
+        signer = Signer.getInstance(seed)
     }
 
     override fun onCreate() {

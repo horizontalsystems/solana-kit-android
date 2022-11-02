@@ -3,8 +3,10 @@ package io.horizontalsystems.solanakit.sample.ui.balance
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.horizontalsystems.solanakit.models.Address
 import io.horizontalsystems.solanakit.sample.App
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 
 class BalanceViewModel : ViewModel() {
 

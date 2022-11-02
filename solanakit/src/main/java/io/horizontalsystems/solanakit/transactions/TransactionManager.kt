@@ -147,7 +147,8 @@ class TransactionManager(
             rpcAction.sendSPLTokens(
                 mintAddress.publicKey, PublicKey(tokenAccount.address), toAddress.publicKey,
                 amount.movePointRight(mintAccount.decimals).toLong(),
-                account = signerAccount
+                account = signerAccount,
+                allowUnfundedRecipient = true
             ) { result ->
                 result.onSuccess { transactionHash ->
                     val fullTransaction = FullTransaction(

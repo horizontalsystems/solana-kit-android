@@ -6,7 +6,6 @@ import com.solana.models.ConfirmedSignFAddr2
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Types
 
-
 fun Api.getSignaturesForAddress(
     account: PublicKey,
     limit: Int? = null,

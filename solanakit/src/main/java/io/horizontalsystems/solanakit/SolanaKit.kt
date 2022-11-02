@@ -2,12 +2,13 @@ package io.horizontalsystems.solanakit
 
 import android.app.Application
 import android.content.Context
-import com.metaplex.lib.drivers.rpc.JdkRpcDriver
-import com.metaplex.lib.drivers.solana.SolanaConnectionDriver
+import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountJsonAdapterFactory
+import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountRule
 import com.solana.actions.Action
 import com.solana.api.Api
 import com.solana.networking.Network
-import com.solana.networking.NetworkingRouter
+import com.solana.networking.NetworkingRouterConfig
+import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
@@ -196,14 +197,15 @@ class SolanaKit(
             debug: Boolean = false
         ): SolanaKit {
             val httpClient = httpClient(debug)
-            val router = NetworkingRouter(rpcSource.endpoint, httpClient)
+            val config = NetworkingRouterConfig(listOf(MetadataAccountRule()), listOf(MetadataAccountJsonAdapterFactory()))
+            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
             val connectionManager = ConnectionManager(application)
 
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
             val mainStorage = MainStorage(mainDatabase)
 
             val rpcApiClient = Api(router)
-            val nftClient = NftClient(SolanaConnectionDriver(JdkRpcDriver(rpcSource.endpoint.url)))
+            val nftClient = NftClient(rpcApiClient)
             val rpcAction = Action(rpcApiClient, listOf())
             val apiSyncer = ApiSyncer(rpcApiClient, rpcSource.syncInterval, connectionManager, mainStorage)
             val address = Address(addressString)

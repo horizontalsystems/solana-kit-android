@@ -36,9 +36,9 @@ class TokenAccountManager(
     val tokenAccountsUpdated: StateFlow<List<TokenAccount>> = _tokenAccountsUpdated
 
     fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = _tokenBalanceFlow
-            .filterNotNull()
-            .filter { it.mintAddress == mintAddress }
-            .map { it.balance.movePointLeft(it.decimals) }
+        .filterNotNull()
+        .filter { it.mintAddress == mintAddress }
+        .map { it.balance.movePointLeft(it.decimals) }
 
     fun balance(mintAddress: String): BigDecimal? =
         storage.getTokenAccount(mintAddress)?.let{ it.balance.movePointLeft(it.decimals) }
