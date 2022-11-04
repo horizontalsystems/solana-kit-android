@@ -144,7 +144,7 @@ class SolanaKit(
     suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSol(toAddress, amount, signer.account)
 
-    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: BigDecimal, signer: Signer): FullTransaction =
+    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
 
     sealed class SyncState {

@@ -73,9 +73,9 @@ class TransactionManager(
                             hash = syncedTxHeader.hash,
                             timestamp = syncedTxHeader.timestamp,
                             fee = syncedTxHeader.fee,
-                            from = existingTxHeader.from ?: syncedTxHeader.from,
-                            to = existingTxHeader.to ?: syncedTxHeader.to,
-                            amount = existingTxHeader.amount ?: syncedTxHeader.amount,
+                            from = syncedTxHeader.from ?: existingTxHeader.from,
+                            to = syncedTxHeader.to ?: existingTxHeader.to,
+                            amount = syncedTxHeader.amount ?: existingTxHeader.amount,
                             error = syncedTxHeader.error,
                             pending = false
                         ),
@@ -121,7 +121,7 @@ class TransactionManager(
                 val fullTransaction = FullTransaction(
                     Transaction(
                         transactionHash, Instant.now().epochSecond, SolanaKit.fee,
-                        addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal().movePointLeft(9),
+                        addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal(),
                         pending = true
                     ),
                     listOf()
@@ -138,7 +138,7 @@ class TransactionManager(
         }
     }
 
-    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: BigDecimal, signerAccount: Account): FullTransaction {
+    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
         val mintAddressString = mintAddress.publicKey.toBase58()
         val mintAccount = storage.getMintAccount(mintAddressString) ?: throw Exception("MintAccount not found $mintAddressString")
         val tokenAccount = tokenAccountManager.getTokenAccountByMintAddress(mintAddressString) ?: throw Exception("TokenAccount not found for $mintAddressString")
@@ -146,7 +146,7 @@ class TransactionManager(
         return suspendCoroutine { continuation ->
             rpcAction.sendSPLTokens(
                 mintAddress.publicKey, PublicKey(tokenAccount.address), toAddress.publicKey,
-                amount.movePointRight(mintAccount.decimals).toLong(),
+                amount,
                 account = signerAccount,
                 allowUnfundedRecipient = true
             ) { result ->
@@ -155,7 +155,7 @@ class TransactionManager(
                         Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, pending = true),
                         listOf(
                             FullTokenTransfer(
-                                TokenTransfer(transactionHash, mintAddressString, false, amount),
+                                TokenTransfer(transactionHash, mintAddressString, false, amount.toBigDecimal()),
                                 mintAccount
                             )
                         )
