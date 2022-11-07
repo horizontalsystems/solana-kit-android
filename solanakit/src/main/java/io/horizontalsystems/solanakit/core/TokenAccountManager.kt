@@ -78,6 +78,9 @@ class TokenAccountManager(
     fun getTokenAccountByMintAddress(mintAddress: String): TokenAccount? =
         storage.getTokenAccount(mintAddress)
 
+    fun tokenAccounts(): List<TokenAccount> =
+        storage.getTokenAccounts()
+
     private fun handleBalance(tokenAccounts: List<TokenAccount>, tokenAccountsBufferInfo: List<BufferInfo<AccountInfo>?>) {
         val updatedTokenAccounts = mutableListOf<TokenAccount>()
 

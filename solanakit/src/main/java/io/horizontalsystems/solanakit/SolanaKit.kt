@@ -15,6 +15,7 @@ import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
+import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
@@ -146,6 +147,9 @@ class SolanaKit(
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
+
+    fun tokenAccounts() : List<TokenAccount> =
+        tokenAccountManager.tokenAccounts()
 
     sealed class SyncState {
         class Synced : SyncState()
