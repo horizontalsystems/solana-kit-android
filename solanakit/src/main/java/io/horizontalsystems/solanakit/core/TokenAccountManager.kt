@@ -6,7 +6,8 @@ import com.solana.core.PublicKey
 import com.solana.models.buffer.AccountInfo
 import com.solana.models.buffer.BufferInfo
 import io.horizontalsystems.solanakit.SolanaKit
-import io.horizontalsystems.solanakit.database.main.MainStorage
+import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
+import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
 import kotlinx.coroutines.flow.*
 import java.math.BigDecimal
@@ -17,7 +18,7 @@ interface ITokenAccountListener {
 
 class TokenAccountManager(
     private val rpcClient: Api,
-    private val storage: MainStorage
+    private val storage: TransactionStorage
 ) {
 
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
@@ -78,8 +79,8 @@ class TokenAccountManager(
     fun getTokenAccountByMintAddress(mintAddress: String): TokenAccount? =
         storage.getTokenAccount(mintAddress)
 
-    fun tokenAccounts(): List<TokenAccount> =
-        storage.getTokenAccounts()
+    fun tokenAccounts(): List<FullTokenAccount> =
+        storage.getFullTokenAccounts()
 
     private fun handleBalance(tokenAccounts: List<TokenAccount>, tokenAccountsBufferInfo: List<BufferInfo<AccountInfo>?>) {
         val updatedTokenAccounts = mutableListOf<TokenAccount>()

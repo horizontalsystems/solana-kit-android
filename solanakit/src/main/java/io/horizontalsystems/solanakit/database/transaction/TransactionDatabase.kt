@@ -6,19 +6,20 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import io.horizontalsystems.solanakit.database.transaction.dao.MintAccountDao
+import io.horizontalsystems.solanakit.database.transaction.dao.TokenAccountDao
 import io.horizontalsystems.solanakit.database.transaction.dao.TransactionSyncerStateDao
 import io.horizontalsystems.solanakit.database.transaction.dao.TransactionsDao
 import io.horizontalsystems.solanakit.models.*
-import java.util.concurrent.Executors
 
 @Database(
     entities = [
         LastSyncedTransaction::class,
         MintAccount::class,
         TokenTransfer::class,
-        Transaction::class
+        Transaction::class,
+        TokenAccount::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -27,6 +28,7 @@ abstract class TransactionDatabase : RoomDatabase() {
     abstract fun transactionSyncerStateDao(): TransactionSyncerStateDao
     abstract fun transactionsDao(): TransactionsDao
     abstract fun mintAccountDao(): MintAccountDao
+    abstract fun tokenAccountsDao(): TokenAccountDao
 
     companion object {
 

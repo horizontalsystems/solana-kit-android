@@ -10,6 +10,7 @@ class TransactionStorage(
     private val syncerStateDao = database.transactionSyncerStateDao()
     private val transactionsDao = database.transactionsDao()
     private val mintAccountDao = database.mintAccountDao()
+    private val tokenAccountDao = database.tokenAccountsDao()
 
     fun getSyncedBlockTime(syncerId: String): LastSyncedTransaction? =
         syncerStateDao.get(syncerId)
@@ -103,5 +104,19 @@ class TransactionStorage(
 
         return transactionsDao.getTransactions(SimpleSQLiteQuery(sqlQuery)).map { it.fullTransaction }
     }
+
+    fun saveTokenAccounts(tokenAccounts: List<TokenAccount>) {
+        tokenAccountDao.insert(tokenAccounts)
+    }
+
+    fun getTokenAccounts(mintAddresses: List<String>? = null): List<TokenAccount> =
+        if (mintAddresses == null) tokenAccountDao.getAll()
+        else tokenAccountDao.get(mintAddresses)
+
+    fun getTokenAccount(mintAddress: String): TokenAccount? =
+        tokenAccountDao.get(mintAddress)
+
+    fun getFullTokenAccounts(): List<FullTokenAccount> =
+        tokenAccountDao.getAllFullAccounts().map { it.fullTokenAccount }
 
 }

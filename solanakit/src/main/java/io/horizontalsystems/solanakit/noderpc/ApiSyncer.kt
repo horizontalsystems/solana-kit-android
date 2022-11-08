@@ -69,7 +69,7 @@ class ApiSyncer(
         stopTimer()
     }
 
-    fun sync() {
+    private fun sync() {
         api.getBlockHeight {
             it.onSuccess { blockHeight ->
                 handleBlockHeight(blockHeight)
@@ -106,8 +106,8 @@ class ApiSyncer(
         timerJob = scope?.launch {
             flow {
                 while (isActive) {
-                    delay(syncInterval.toDuration(DurationUnit.SECONDS))
                     emit(Unit)
+                    delay(syncInterval.toDuration(DurationUnit.SECONDS))
                 }
             }.collect { sync() }
         }

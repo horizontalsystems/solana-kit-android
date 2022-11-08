@@ -71,7 +71,6 @@ class TransactionSyncer(
 
             syncState = SolanaKit.SyncState.Synced()
         } catch (exception: Throwable) {
-            throw exception
             syncState = SolanaKit.SyncState.NotSynced(exception)
         }
     }
@@ -167,7 +166,7 @@ class TransactionSyncer(
             .filterNotNull()
             .filter { it.owner == tokenMetadataProgramId }
             .forEach {
-                val metadata = it.data as? MetadataAccount ?: return@forEach
+                val metadata = it.data?.value ?: return@forEach
                 metadataAccountsMap[metadata.mint.toBase58()] = metadata
             }
 

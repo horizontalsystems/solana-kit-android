@@ -57,7 +57,6 @@ class SyncManager(
         apiSyncer.start(scope)
         balanceSyncer.start()
         tokenAccountSyncer.start()
-        transactionSyncer.sync()
 
         scope.launch {
             transactionManager.transactionsFlow
@@ -65,6 +64,7 @@ class SyncManager(
         }
 
         scope.launch {
+            // This is done only to launch token account sync in new coroutine
             tokenAccountSyncer.tokenAccountsUpdated
                 .collect { tokenAccountSyncer.sync(it) }
         }

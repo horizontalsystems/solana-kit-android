@@ -13,9 +13,9 @@ import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
+import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
-import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
@@ -71,6 +71,7 @@ class SolanaKit(
     val tokenBalanceSyncStateFlow: StateFlow<SyncState> = _tokenBalanceSyncStateFlow
     fun tokenBalance(mintAddress: String): BigDecimal? =
         tokenAccountManager.balance(mintAddress)
+
     fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = tokenAccountManager.tokenBalanceFlow(mintAddress)
 
     // Transactions API
@@ -94,7 +95,7 @@ class SolanaKit(
     }
 
     fun refresh() {
-        if (!scope?.isActive!!) return
+        if (scope?.isActive != true) return
 
         scope?.launch {
             syncManager.refresh(this)
@@ -148,7 +149,7 @@ class SolanaKit(
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
 
-    fun tokenAccounts() : List<TokenAccount> =
+    fun tokenAccounts(): List<FullTokenAccount> =
         tokenAccountManager.tokenAccounts()
 
     sealed class SyncState {
@@ -215,11 +216,11 @@ class SolanaKit(
             val address = Address(addressString)
 
             val balanceManager = BalanceManager(address.publicKey, rpcApiClient, mainStorage)
-            val tokenAccountManager = TokenAccountManager(rpcApiClient, mainStorage)
 
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
             val solscanClient = SolscanClient(httpClient)
+            val tokenAccountManager = TokenAccountManager(rpcApiClient, transactionStorage)
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
             val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, nftClient, transactionStorage, transactionManager)
 
@@ -237,9 +238,7 @@ class SolanaKit(
 
         private fun httpClient(debug: Boolean): OkHttpClient =
             if (debug) {
-                val consoleLogger = HttpLoggingInterceptor.Logger { message -> println(message) }
-
-                val logging = HttpLoggingInterceptor(consoleLogger)
+                val logging = HttpLoggingInterceptor()
                 logging.level = HttpLoggingInterceptor.Level.BODY
 
                 OkHttpClient.Builder().addInterceptor(logging).build()
