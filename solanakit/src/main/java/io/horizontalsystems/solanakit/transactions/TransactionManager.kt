@@ -140,8 +140,9 @@ class TransactionManager(
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
         val mintAddressString = mintAddress.publicKey.toBase58()
-        val mintAccount = storage.getMintAccount(mintAddressString) ?: throw Exception("MintAccount not found $mintAddressString")
-        val tokenAccount = tokenAccountManager.getTokenAccountByMintAddress(mintAddressString) ?: throw Exception("TokenAccount not found for $mintAddressString")
+        val fullTokenAccount = tokenAccountManager.getFullTokenAccountByMintAddress(mintAddressString) ?: throw Exception("TokenAccount not found for $mintAddressString")
+        val tokenAccount = fullTokenAccount.tokenAccount
+        val mintAccount = fullTokenAccount.mintAccount
 
         return suspendCoroutine { continuation ->
             rpcAction.sendSPLTokens(

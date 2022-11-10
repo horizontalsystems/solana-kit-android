@@ -10,7 +10,7 @@ interface TokenAccountDao {
     fun insert(balance: List<TokenAccount>)
 
     @Query("SELECT * FROM TokenAccount WHERE mintAddress=:mintAddress LIMIT 1")
-    fun get(mintAddress: String): TokenAccount?
+    fun get(mintAddress: String): TokenAccountWrapper?
 
     @Query("SELECT * FROM TokenAccount WHERE mintAddress IN (:mintAddresses)")
     fun get(mintAddresses: List<String>): List<TokenAccount>

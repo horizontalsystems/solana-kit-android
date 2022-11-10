@@ -113,8 +113,8 @@ class TransactionStorage(
         if (mintAddresses == null) tokenAccountDao.getAll()
         else tokenAccountDao.get(mintAddresses)
 
-    fun getTokenAccount(mintAddress: String): TokenAccount? =
-        tokenAccountDao.get(mintAddress)
+    fun getFullTokenAccount(mintAddress: String): FullTokenAccount? =
+        tokenAccountDao.get(mintAddress)?.fullTokenAccount
 
     fun getFullTokenAccounts(): List<FullTokenAccount> =
         tokenAccountDao.getAllFullAccounts().map { it.fullTokenAccount }

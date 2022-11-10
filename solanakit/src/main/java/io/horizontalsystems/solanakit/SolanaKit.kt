@@ -12,10 +12,7 @@ import com.solana.networking.OkHttpNetworkingRouter
 import io.horizontalsystems.solanakit.core.*
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
-import io.horizontalsystems.solanakit.models.Address
-import io.horizontalsystems.solanakit.models.FullTokenAccount
-import io.horizontalsystems.solanakit.models.FullTransaction
-import io.horizontalsystems.solanakit.models.RpcSource
+import io.horizontalsystems.solanakit.models.*
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
@@ -26,6 +23,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
@@ -69,15 +67,23 @@ class SolanaKit(
     val tokenBalanceSyncState: SyncState
         get() = syncManager.tokenBalanceSyncState
     val tokenBalanceSyncStateFlow: StateFlow<SyncState> = _tokenBalanceSyncStateFlow
-    fun tokenBalance(mintAddress: String): BigDecimal? =
-        tokenAccountManager.balance(mintAddress)
+    val fungibleTokenAccountsFlow: Flow<List<FullTokenAccount>> = tokenAccountManager.tokenAccountsFlow.map { tokenAccounts ->
+        tokenAccounts.filter { !it.mintAccount.isNft }
+    }
+    val nonFungibleTokenAccountsFlow: Flow<List<FullTokenAccount>> = tokenAccountManager.tokenAccountsFlow.map { tokenAccounts ->
+        tokenAccounts.filter { it.mintAccount.isNft }
+    }
 
-    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = tokenAccountManager.tokenBalanceFlow(mintAddress)
+    fun tokenAccount(mintAddress: String): FullTokenAccount? =
+        tokenAccountManager.fullTokenAccount(mintAddress)
+
+    fun tokenAccountFlow(mintAddress: String): Flow<FullTokenAccount> = tokenAccountManager.tokenBalanceFlow(mintAddress)
 
     // Transactions API
     val transactionsSyncState: SyncState
         get() = syncManager.transactionsSyncState
     val transactionsSyncStateFlow: StateFlow<SyncState> = _transactionsSyncStateFlow
+
     fun allTransactionsFlow(incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.allTransactionsFlow(incoming)
     fun solTransactionsFlow(incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.solTransactionsFlow(incoming)
     fun splTransactionsFlow(mintAddress: String, incoming: Boolean?): Flow<List<FullTransaction>> = transactionManager.splTransactionsFlow(mintAddress, incoming)
@@ -149,8 +155,11 @@ class SolanaKit(
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
 
-    fun tokenAccounts(): List<FullTokenAccount> =
-        tokenAccountManager.tokenAccounts()
+    fun fungibleTokenAccounts(): List<FullTokenAccount> =
+        tokenAccountManager.tokenAccounts().filter { !it.mintAccount.isNft }
+
+    fun nonFungibleTokenAccounts(): List<FullTokenAccount> =
+        tokenAccountManager.tokenAccounts().filter { it.mintAccount.isNft }
 
     sealed class SyncState {
         class Synced : SyncState()

@@ -62,12 +62,6 @@ class SyncManager(
             transactionManager.transactionsFlow
                 .collect { balanceSyncer.sync() }
         }
-
-        scope.launch {
-            // This is done only to launch token account sync in new coroutine
-            tokenAccountSyncer.tokenAccountsUpdated
-                .collect { tokenAccountSyncer.sync(it) }
-        }
     }
 
     suspend fun refresh(scope: CoroutineScope) {

@@ -31,18 +31,19 @@ class TokenAccountManager(
 
     var listener: ITokenAccountListener? = null
 
-    private val _tokenBalanceFlow = MutableStateFlow<TokenAccount?>(null)
-    private val _tokenAccountsUpdated = MutableStateFlow<List<TokenAccount>>(listOf())
+    private val _tokenAccountsUpdatedFlow = MutableStateFlow<List<FullTokenAccount>>(listOf())
+    val tokenAccountsFlow: StateFlow<List<FullTokenAccount>> = _tokenAccountsUpdatedFlow
 
-    val tokenAccountsUpdated: StateFlow<List<TokenAccount>> = _tokenAccountsUpdated
-
-    fun tokenBalanceFlow(mintAddress: String): Flow<BigDecimal> = _tokenBalanceFlow
+    fun tokenBalanceFlow(mintAddress: String): Flow<FullTokenAccount> = _tokenAccountsUpdatedFlow
+        .map { tokenAccounts ->
+            tokenAccounts.firstOrNull {
+                it.mintAccount.address == mintAddress
+            }
+        }
         .filterNotNull()
-        .filter { it.mintAddress == mintAddress }
-        .map { it.balance.movePointLeft(it.decimals) }
 
-    fun balance(mintAddress: String): BigDecimal? =
-        storage.getTokenAccount(mintAddress)?.let{ it.balance.movePointLeft(it.decimals) }
+    fun fullTokenAccount(mintAddress: String): FullTokenAccount? =
+        storage.getFullTokenAccount(mintAddress)
 
     fun start() {
         syncState = SolanaKit.SyncState.Syncing()
@@ -73,11 +74,11 @@ class TokenAccountManager(
         storage.saveTokenAccounts(receivedTokenAccounts)
 
         val tokenAccountUpdated: List<TokenAccount> = storage.getTokenAccounts(existingMintAddresses) + receivedTokenAccounts
-        _tokenAccountsUpdated.tryEmit(tokenAccountUpdated.toSet().toList())
+        sync(tokenAccountUpdated.toSet().toList())
     }
 
-    fun getTokenAccountByMintAddress(mintAddress: String): TokenAccount? =
-        storage.getTokenAccount(mintAddress)
+    fun getFullTokenAccountByMintAddress(mintAddress: String): FullTokenAccount? =
+        storage.getFullTokenAccount(mintAddress)
 
     fun tokenAccounts(): List<FullTokenAccount> =
         storage.getFullTokenAccounts()
@@ -93,10 +94,7 @@ class TokenAccountManager(
         }
 
         storage.saveTokenAccounts(updatedTokenAccounts)
-        tokenAccounts.forEach {
-            _tokenBalanceFlow.tryEmit(it)
-        }
-
+        _tokenAccountsUpdatedFlow.tryEmit(storage.getFullTokenAccounts())
         syncState = SolanaKit.SyncState.Synced()
     }
 
