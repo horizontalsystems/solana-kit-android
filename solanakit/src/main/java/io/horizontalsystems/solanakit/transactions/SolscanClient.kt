@@ -193,7 +193,7 @@ class SolscanClient(
 data class SolscanTransaction(
     val hash: String,
     val blockTime: Long,
-    val fee: String,
+    val fee: String? = null,
     val tokenAccountAddress: String? = null,
     val splBalanceChange: String? = null,
     val mintAccountAddress: String? = null,

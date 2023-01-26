@@ -86,31 +86,34 @@ class TransactionSyncer(
         }
 
         for ((hash, solscanTxs) in solscanTxsMap.groupBy { it.hash }) {
-            val existingTransaction = transactions[hash]?.transaction
-            val solscanTx = solscanTxs.first()
-
-            val mergedTransaction = Transaction(
-                hash,
-                existingTransaction?.timestamp ?: solscanTx.blockTime,
-                solscanTx.fee.toBigDecimal(),
-                solscanTx.solTransferSource,
-                solscanTx.solTransferDestination,
-                solscanTx.solAmount?.toBigDecimal(),
-                existingTransaction?.error
-            )
-
-            val tokenTransfers: List<FullTokenTransfer> = solscanTxs.mapNotNull { solscanTx ->
-                val mintAddress = solscanTx.mintAccountAddress ?: return@mapNotNull null
-                val mintAccount = mintAccounts[mintAddress] ?: return@mapNotNull null
-                val amount = solscanTx.splBalanceChange?.toBigDecimal() ?: return@mapNotNull null
-
-                FullTokenTransfer(
-                    TokenTransfer(hash, mintAddress, amount > BigDecimal.ZERO, amount),
-                    mintAccount
+            try {
+                val existingTransaction = transactions[hash]?.transaction
+                val solscanTx = solscanTxs.first()
+                val mergedTransaction = Transaction(
+                    hash,
+                    existingTransaction?.timestamp ?: solscanTx.blockTime,
+                    solscanTx.fee?.toBigDecimalOrNull(),
+                    solscanTx.solTransferSource,
+                    solscanTx.solTransferDestination,
+                    solscanTx.solAmount?.toBigDecimal(),
+                    existingTransaction?.error
                 )
-            }
 
-            transactions[hash] = FullTransaction(mergedTransaction, tokenTransfers)
+                val tokenTransfers: List<FullTokenTransfer> = solscanTxs.mapNotNull { solscanTx ->
+                    val mintAddress = solscanTx.mintAccountAddress ?: return@mapNotNull null
+                    val mintAccount = mintAccounts[mintAddress] ?: return@mapNotNull null
+                    val amount = solscanTx.splBalanceChange?.toBigDecimal() ?: return@mapNotNull null
+
+                    FullTokenTransfer(
+                        TokenTransfer(hash, mintAddress, amount > BigDecimal.ZERO, amount),
+                        mintAccount
+                    )
+                }
+
+                transactions[hash] = FullTransaction(mergedTransaction, tokenTransfers)
+            } catch (e: Throwable) {
+                continue
+            }
         }
 
         return transactions.values.toList()
