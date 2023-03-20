@@ -40,7 +40,6 @@ class SyncManager(
         get() = transactionSyncer.syncState
 
     private var started = false
-    private var forceSyncing = false
 
     init {
         balanceSyncer.listener = this
@@ -65,17 +64,23 @@ class SyncManager(
     }
 
     suspend fun refresh(scope: CoroutineScope) {
-        if (forceSyncing) return
+        if (
+            balanceSyncer.syncState !is SolanaKit.SyncState.Syncing &&
+            tokenAccountSyncer.syncState !is SolanaKit.SyncState.Syncing &&
+            transactionSyncer.syncState !is SolanaKit.SyncState.Syncing
+        ) {
+            apiSyncer.stop()
+            apiSyncer.start(scope)
 
-        when (apiSyncer.state) {
-            SyncerState.Ready -> {
-                forceSyncing = true
-                balanceSyncer.sync()
-                tokenAccountSyncer.sync()
-                transactionSyncer.sync()
-            }
-            is SyncerState.NotReady -> {
-                start(scope)
+            when (apiSyncer.state) {
+                SyncerState.Ready -> {
+                    balanceSyncer.sync()
+                    tokenAccountSyncer.sync()
+                    transactionSyncer.sync()
+                }
+                is SyncerState.NotReady -> {
+                    start(scope)
+                }
             }
         }
     }
@@ -109,21 +114,18 @@ class SyncManager(
     override fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateTokenSyncState(syncState)
-            checkForceSyncFinished()
         }
     }
 
     override fun onUpdateTransactionSyncState(syncState: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateTransactionSyncState(syncState)
-            checkForceSyncFinished()
         }
     }
 
     override fun onUpdateBalanceSyncState(value: SolanaKit.SyncState) {
         scope?.launch {
             listener?.onUpdateBalanceSyncState(value)
-            checkForceSyncFinished()
         }
     }
 
@@ -137,16 +139,6 @@ class SyncManager(
     override fun onUpdateBalance(balance: Long) {
         scope?.launch {
             listener?.onUpdateBalance(balance)
-        }
-    }
-
-    private fun checkForceSyncFinished() {
-        if (
-            balanceSyncer.syncState is SolanaKit.SyncState.Synced &&
-            tokenAccountSyncer.syncState is SolanaKit.SyncState.Synced &&
-            transactionSyncer.syncState is SolanaKit.SyncState.Synced
-        ) {
-            forceSyncing = false
         }
     }
 

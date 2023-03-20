@@ -10,7 +10,6 @@ import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
 import kotlinx.coroutines.flow.*
-import java.math.BigDecimal
 
 interface ITokenAccountListener {
     fun onUpdateTokenSyncState(value: SolanaKit.SyncState)
