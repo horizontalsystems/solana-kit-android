@@ -1,8 +1,10 @@
 package io.horizontalsystems.solanakit.transactions
 
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -12,11 +14,14 @@ import kotlin.coroutines.suspendCoroutine
 
 
 class SolscanClient(
-    private val httpClient: OkHttpClient
+    auth: String,
+    debug: Boolean
 ) {
     val solSyncSourceName = "solscan.io/solTransfers"
     val splSyncSourceName = "solscan.io/splTransfers"
     private val url = "https://public-api.solscan.io"
+
+    private val httpClient = httpClient(auth, debug)
 
     suspend fun solTransfers(account: String, lastSolTransferHash: String?): List<SolscanTransaction> {
         val transactionsLimit = if (lastSolTransferHash != null) 5 else maxTransactionsLimit
@@ -127,6 +132,27 @@ class SolscanClient(
                 continuation.resumeWithException(RuntimeException(e))
             }
         }
+    }
+
+    private fun httpClient(apiKey: String, debug: Boolean): OkHttpClient {
+        require(apiKey.isNotBlank()) { "Api Key can not be empty" }
+
+        val headersInterceptor = Interceptor { chain ->
+            val requestBuilder = chain.request().newBuilder()
+            requestBuilder.header("token", apiKey)
+            chain.proceed(requestBuilder.build())
+        }
+
+        val client = OkHttpClient.Builder()
+        client.addInterceptor(headersInterceptor)
+
+        if (debug) {
+            val logging = HttpLoggingInterceptor()
+            logging.level = HttpLoggingInterceptor.Level.BODY
+            client.addInterceptor(logging)
+        }
+
+        return client.build()
     }
 
 //    This method uses `exportTransactions` endpoint of solscan.io API, which is not working for unknown reasons.

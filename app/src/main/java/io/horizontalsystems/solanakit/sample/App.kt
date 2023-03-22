@@ -20,8 +20,12 @@ class App : Application() {
         val address = Signer.address(seed)
 
         solanaKit = SolanaKit.getInstance(
-            instance, address,
-            Configuration.rpcSource, Configuration.walletId, true
+            application = instance,
+            addressString = address,
+            rpcSource = Configuration.rpcSource,
+            walletId = Configuration.walletId,
+            solscanApiKey = Configuration.solscanApiKey,
+            debug = true
         )
 
         signer = Signer.getInstance(seed)
