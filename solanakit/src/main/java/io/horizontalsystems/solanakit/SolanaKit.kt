@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
@@ -208,6 +209,7 @@ class SolanaKit(
             addressString: String,
             rpcSource: RpcSource,
             walletId: String,
+            solscanApiKey: String,
             debug: Boolean = false
         ): SolanaKit {
             val httpClient = httpClient(debug)
@@ -228,7 +230,7 @@ class SolanaKit(
 
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
-            val solscanClient = SolscanClient(httpClient)
+            val solscanClient = SolscanClient(solscanApiKey, debug)
             val tokenAccountManager = TokenAccountManager(rpcApiClient, transactionStorage)
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
             val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, nftClient, transactionStorage, transactionManager)
@@ -245,15 +247,23 @@ class SolanaKit(
             SolanaDatabaseManager.clear(context, walletId)
         }
 
-        private fun httpClient(debug: Boolean): OkHttpClient =
+        private fun httpClient(debug: Boolean): OkHttpClient {
+            val headersInterceptor = Interceptor { chain ->
+                val requestBuilder = chain.request().newBuilder()
+                chain.proceed(requestBuilder.build())
+            }
+
+            val client = OkHttpClient.Builder()
+            client.addInterceptor(headersInterceptor)
+
             if (debug) {
                 val logging = HttpLoggingInterceptor()
                 logging.level = HttpLoggingInterceptor.Level.BODY
-
-                OkHttpClient.Builder().addInterceptor(logging).build()
-            } else {
-                OkHttpClient()
+                client.addInterceptor(logging)
             }
+
+            return client.build()
+        }
 
     }
 
