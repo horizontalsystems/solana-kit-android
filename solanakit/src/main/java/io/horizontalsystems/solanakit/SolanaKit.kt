@@ -68,7 +68,7 @@ class SolanaKit(
     val tokenBalanceSyncState: SyncState
         get() = syncManager.tokenBalanceSyncState
     val tokenBalanceSyncStateFlow: StateFlow<SyncState> = _tokenBalanceSyncStateFlow
-    val fungibleTokenAccountsFlow: Flow<List<FullTokenAccount>> = tokenAccountManager.tokenAccountsFlow.map { tokenAccounts ->
+    val fungibleTokenAccountsFlow: Flow<List<FullTokenAccount>> = tokenAccountManager.newTokenAccountsFlow.map { tokenAccounts ->
         tokenAccounts.filter { !it.mintAccount.isNft }
     }
     val nonFungibleTokenAccountsFlow: Flow<List<FullTokenAccount>> = tokenAccountManager.tokenAccountsFlow.map { tokenAccounts ->
@@ -235,7 +235,7 @@ class SolanaKit(
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
             val solscanClient = SolscanClient(solscanApiKey, debug)
-            val tokenAccountManager = TokenAccountManager(rpcApiClient, transactionStorage)
+            val tokenAccountManager = TokenAccountManager(rpcApiClient, transactionStorage, mainStorage)
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
             val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, nftClient, transactionStorage, transactionManager)
 
