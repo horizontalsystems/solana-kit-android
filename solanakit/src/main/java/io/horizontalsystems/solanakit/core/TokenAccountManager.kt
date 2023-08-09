@@ -6,6 +6,7 @@ import com.solana.core.PublicKey
 import com.solana.models.buffer.AccountInfo
 import com.solana.models.buffer.BufferInfo
 import io.horizontalsystems.solanakit.SolanaKit
+import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
@@ -17,7 +18,8 @@ interface ITokenAccountListener {
 
 class TokenAccountManager(
     private val rpcClient: Api,
-    private val storage: TransactionStorage
+    private val storage: TransactionStorage,
+    private val mainStorage: MainStorage
 ) {
 
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
@@ -29,6 +31,9 @@ class TokenAccountManager(
         }
 
     var listener: ITokenAccountListener? = null
+
+    private val _newTokenAccountsFlow = MutableStateFlow<List<FullTokenAccount>>(listOf())
+    val newTokenAccountsFlow: StateFlow<List<FullTokenAccount>> = _newTokenAccountsFlow
 
     private val _tokenAccountsUpdatedFlow = MutableStateFlow<List<FullTokenAccount>>(listOf())
     val tokenAccountsFlow: StateFlow<List<FullTokenAccount>> = _tokenAccountsUpdatedFlow
@@ -57,15 +62,20 @@ class TokenAccountManager(
 
         val tokenAccounts = tokenAccounts ?: storage.getTokenAccounts()
         val publicKeys = tokenAccounts.map { PublicKey.valueOf(it.address) }
+        val initialSync = mainStorage.isInitialSync()
 
         rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java) { result ->
             result.onSuccess { result ->
-                handleBalance(tokenAccounts, result)
+                handleBalance(tokenAccounts, result, initialSync)
             }
 
             result.onFailure {
                 syncState = SolanaKit.SyncState.NotSynced(it)
             }
+        }
+
+        if (initialSync) {
+            mainStorage.saveInitialSync()
         }
     }
 
@@ -74,6 +84,7 @@ class TokenAccountManager(
 
         val tokenAccountUpdated: List<TokenAccount> = storage.getTokenAccounts(existingMintAddresses) + receivedTokenAccounts
         sync(tokenAccountUpdated.toSet().toList())
+        handleNewTokenAccounts(receivedTokenAccounts)
     }
 
     fun getFullTokenAccountByMintAddress(mintAddress: String): FullTokenAccount? =
@@ -82,7 +93,11 @@ class TokenAccountManager(
     fun tokenAccounts(): List<FullTokenAccount> =
         storage.getFullTokenAccounts()
 
-    private fun handleBalance(tokenAccounts: List<TokenAccount>, tokenAccountsBufferInfo: List<BufferInfo<AccountInfo>?>) {
+    private fun handleBalance(
+        tokenAccounts: List<TokenAccount>,
+        tokenAccountsBufferInfo: List<BufferInfo<AccountInfo>?>,
+        initialSync: Boolean
+    ) {
         val updatedTokenAccounts = mutableListOf<TokenAccount>()
 
         for ((index, tokenAccount) in tokenAccounts.withIndex()) {
@@ -95,6 +110,20 @@ class TokenAccountManager(
         storage.saveTokenAccounts(updatedTokenAccounts)
         _tokenAccountsUpdatedFlow.tryEmit(storage.getFullTokenAccounts())
         syncState = SolanaKit.SyncState.Synced()
+        if (initialSync) {
+            handleNewTokenAccounts(updatedTokenAccounts)
+        }
+    }
+
+    private fun handleNewTokenAccounts(tokenAccounts: List<TokenAccount>) {
+        val newFullTokenAccounts = mutableListOf<FullTokenAccount>()
+        tokenAccounts.forEach { tokenAccount ->
+            storage.getFullTokenAccount(tokenAccount.mintAddress)?.let {
+                newFullTokenAccounts.add(it)
+            }
+        }
+
+        _newTokenAccountsFlow.tryEmit(newFullTokenAccounts)
     }
 
 }

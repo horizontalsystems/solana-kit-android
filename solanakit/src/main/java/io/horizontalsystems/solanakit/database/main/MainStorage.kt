@@ -1,6 +1,7 @@
 package io.horizontalsystems.solanakit.database.main
 
 import io.horizontalsystems.solanakit.models.BalanceEntity
+import io.horizontalsystems.solanakit.models.InitialSyncEntity
 import io.horizontalsystems.solanakit.models.LastBlockHeightEntity
 
 class MainStorage(
@@ -21,6 +22,14 @@ class MainStorage(
 
     fun getBalance(): Long? {
         return database.balanceDao().getBalance()?.lamports
+    }
+
+    fun saveInitialSync() {
+        database.initialSyncDao().insert(InitialSyncEntity(initial = true))
+    }
+
+    fun isInitialSync(): Boolean {
+        return database.initialSyncDao().getAllEntities().isEmpty()
     }
 
 }
