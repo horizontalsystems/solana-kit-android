@@ -118,6 +118,9 @@ class SolanaKit(
     fun statusInfo(): Map<String, Any> {
         val statusInfo = LinkedHashMap<String, Any>()
 
+        statusInfo["Last Block Height"] = lastBlockHeight ?: 0L
+        statusInfo["Sync State"] = syncState
+
         return statusInfo
     }
 
