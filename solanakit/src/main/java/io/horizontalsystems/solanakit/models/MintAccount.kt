@@ -7,8 +7,8 @@ import androidx.room.PrimaryKey
 class MintAccount(
     @PrimaryKey
     val address: String,
-    val supply: Long,
     val decimals: Int,
+    val supply: Long? = null,
     val isNft: Boolean = false,
     val name: String? = null,
     val symbol: String? = null,

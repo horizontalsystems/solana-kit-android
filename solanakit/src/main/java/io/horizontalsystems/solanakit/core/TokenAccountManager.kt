@@ -9,8 +9,14 @@ import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.FullTokenAccount
+import io.horizontalsystems.solanakit.models.MintAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import java.math.BigDecimal
 
 interface ITokenAccountListener {
     fun onUpdateTokenSyncState(value: SolanaKit.SyncState)
@@ -108,7 +114,7 @@ class TokenAccountManager(
         }
 
         storage.saveTokenAccounts(updatedTokenAccounts)
-        _tokenAccountsUpdatedFlow.tryEmit(storage.getFullTokenAccounts())
+        //_tokenAccountsUpdatedFlow.tryEmit(storage.getFullTokenAccounts())
         syncState = SolanaKit.SyncState.Synced()
         if (initialSync) {
             handleNewTokenAccounts(updatedTokenAccounts)
@@ -124,6 +130,29 @@ class TokenAccountManager(
         }
 
         _newTokenAccountsFlow.tryEmit(newFullTokenAccounts)
+    }
+
+    fun addTokenAccount(walletAddress: String, mintAddress: String, decimals: Int) {
+
+        if (!storage.tokenAccountExists(mintAddress)) {
+            val userTokenMintAddress = associatedTokenAddress(walletAddress, mintAddress)
+            val tokenAccount = TokenAccount(userTokenMintAddress, mintAddress, BigDecimal.ZERO, decimals)
+            val mintAccount = MintAccount(mintAddress, decimals)
+            storage.addTokenAccount(tokenAccount)
+            storage.addMintAccount(mintAccount)
+        }
+
+        sync()
+    }
+
+    private fun associatedTokenAddress(
+        walletAddress: String,
+        tokenMintAddress: String
+    ): String {
+        return PublicKey.associatedTokenAddress(
+            walletAddress = PublicKey(walletAddress),
+            tokenMintAddress = PublicKey(tokenMintAddress)
+        ).address.toBase58()
     }
 
 }
