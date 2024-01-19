@@ -1,10 +1,23 @@
 package io.horizontalsystems.solanakit.database.transaction.dao
 
-import androidx.room.*
-import io.horizontalsystems.solanakit.models.*
+import androidx.room.Dao
+import androidx.room.Embedded
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Relation
+import io.horizontalsystems.solanakit.models.FullTokenAccount
+import io.horizontalsystems.solanakit.models.MintAccount
+import io.horizontalsystems.solanakit.models.TokenAccount
 
 @Dao
 interface TokenAccountDao {
+
+    @Query("SELECT * FROM TokenAccount WHERE address=:address LIMIT 1")
+    fun getByTokenAddress(address: String): TokenAccount?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(tokenAccount: TokenAccount)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(balance: List<TokenAccount>)

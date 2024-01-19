@@ -9,26 +9,37 @@ import com.solana.api.Api
 import com.solana.networking.Network
 import com.solana.networking.NetworkingRouterConfig
 import com.solana.networking.OkHttpNetworkingRouter
-import io.horizontalsystems.solanakit.core.*
+import io.horizontalsystems.solanakit.core.BalanceManager
+import io.horizontalsystems.solanakit.core.ISyncListener
+import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
+import io.horizontalsystems.solanakit.core.SyncManager
+import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
-import io.horizontalsystems.solanakit.models.*
+import io.horizontalsystems.solanakit.models.Address
+import io.horizontalsystems.solanakit.models.FullTokenAccount
+import io.horizontalsystems.solanakit.models.FullTransaction
+import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
-import java.util.*
+import java.util.Objects
 
 class SolanaKit(
     private val apiSyncer: ApiSyncer,
@@ -122,6 +133,10 @@ class SolanaKit(
         statusInfo["Sync State"] = syncState
 
         return statusInfo
+    }
+
+    fun addTokenAccount(mintAddress: String, decimals: Int) {
+        tokenAccountManager.addTokenAccount(receiveAddress, mintAddress, decimals)
     }
 
     override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
