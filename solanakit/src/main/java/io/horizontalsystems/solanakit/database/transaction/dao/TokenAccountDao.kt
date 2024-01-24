@@ -13,8 +13,8 @@ import io.horizontalsystems.solanakit.models.TokenAccount
 @Dao
 interface TokenAccountDao {
 
-    @Query("SELECT * FROM TokenAccount WHERE address=:address LIMIT 1")
-    fun getByTokenAddress(address: String): TokenAccount?
+    @Query("SELECT * FROM TokenAccount WHERE mintAddress=:address LIMIT 1")
+    fun getByMintAddress(address: String): TokenAccount?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(tokenAccount: TokenAccount)

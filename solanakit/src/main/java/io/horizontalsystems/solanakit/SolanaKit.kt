@@ -23,6 +23,7 @@ import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
+import io.horizontalsystems.solanakit.transactions.SolanaFmService
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
@@ -137,6 +138,8 @@ class SolanaKit(
 
     fun addTokenAccount(mintAddress: String, decimals: Int) {
         tokenAccountManager.addTokenAccount(receiveAddress, mintAddress, decimals)
+
+        refresh()
     }
 
     override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
@@ -165,7 +168,12 @@ class SolanaKit(
     suspend fun getSolTransactions(incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
         transactionManager.getSolTransaction(incoming, fromHash, limit)
 
-    suspend fun getSplTransactions(mintAddress: String, incoming: Boolean? = null, fromHash: String? = null, limit: Int? = null): List<FullTransaction> =
+    suspend fun getSplTransactions(
+        mintAddress: String,
+        incoming: Boolean? = null,
+        fromHash: String? = null,
+        limit: Int? = null
+    ): List<FullTransaction> =
         transactionManager.getSplTransaction(mintAddress, incoming, fromHash, limit)
 
     suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction =
@@ -253,9 +261,16 @@ class SolanaKit(
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
             val solscanClient = SolscanClient(solscanApiKey, debug)
-            val tokenAccountManager = TokenAccountManager(rpcApiClient, transactionStorage, mainStorage)
+            val tokenAccountManager = TokenAccountManager(addressString, rpcApiClient, transactionStorage, mainStorage, SolanaFmService())
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
-            val transactionSyncer = TransactionSyncer(address.publicKey, rpcApiClient, solscanClient, nftClient, transactionStorage, transactionManager)
+            val transactionSyncer = TransactionSyncer(
+                address.publicKey,
+                rpcApiClient,
+                solscanClient,
+                nftClient,
+                transactionStorage,
+                transactionManager
+            )
 
             val syncManager = SyncManager(apiSyncer, balanceManager, tokenAccountManager, transactionSyncer, transactionManager)
 
