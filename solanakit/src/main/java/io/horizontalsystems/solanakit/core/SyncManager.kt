@@ -54,8 +54,6 @@ class SyncManager(
         this.scope = scope
 
         apiSyncer.start(scope)
-        balanceSyncer.start()
-        tokenAccountSyncer.start()
 
         scope.launch {
             transactionManager.transactionsFlow
@@ -64,24 +62,13 @@ class SyncManager(
     }
 
     suspend fun refresh(scope: CoroutineScope) {
-        if (
-            balanceSyncer.syncState !is SolanaKit.SyncState.Syncing &&
-            tokenAccountSyncer.syncState !is SolanaKit.SyncState.Syncing &&
-            transactionSyncer.syncState !is SolanaKit.SyncState.Syncing
-        ) {
+        if (apiSyncer.state !is SyncerState.Ready) {
             apiSyncer.stop()
             apiSyncer.start(scope)
-
-            when (apiSyncer.state) {
-                SyncerState.Ready -> {
-                    balanceSyncer.sync()
-                    tokenAccountSyncer.sync()
-                    transactionSyncer.sync()
-                }
-                is SyncerState.NotReady -> {
-                    start(scope)
-                }
-            }
+        } else {
+            balanceSyncer.sync()
+            tokenAccountSyncer.sync()
+            transactionSyncer.sync()
         }
     }
 
@@ -96,12 +83,8 @@ class SyncManager(
 
     override fun didUpdateApiState(state: SyncerState) {
         when (state) {
-            SyncerState.Ready -> {
-                scope?.launch {
-                    balanceSyncer.sync()
-                    tokenAccountSyncer.sync()
-                }
-            }
+            SyncerState.Ready -> Unit
+
             is SyncerState.NotReady -> {
                 scope?.launch {
                     balanceSyncer.stop(state.error)
@@ -111,9 +94,9 @@ class SyncManager(
         }
     }
 
-    override fun onUpdateTokenSyncState(syncState: SolanaKit.SyncState) {
+    override fun onUpdateTokenSyncState(value: SolanaKit.SyncState) {
         scope?.launch {
-            listener?.onUpdateTokenSyncState(syncState)
+            listener?.onUpdateTokenSyncState(value)
         }
     }
 
@@ -132,6 +115,9 @@ class SyncManager(
     override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
         scope?.launch {
             listener?.onUpdateLastBlockHeight(lastBlockHeight)
+
+            balanceSyncer.sync()
+            tokenAccountSyncer.sync()
             transactionSyncer.sync()
         }
     }

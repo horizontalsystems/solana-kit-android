@@ -109,6 +109,10 @@ class TransactionStorage(
         tokenAccountDao.insert(tokenAccounts)
     }
 
+    fun saveMintAccounts(mintAccounts: List<MintAccount>) {
+        mintAccountDao.insert(mintAccounts)
+    }
+
     fun getTokenAccounts(mintAddresses: List<String>? = null): List<TokenAccount> =
         if (mintAddresses == null) tokenAccountDao.getAll()
         else tokenAccountDao.get(mintAddresses)
@@ -119,8 +123,8 @@ class TransactionStorage(
     fun getFullTokenAccounts(): List<FullTokenAccount> =
         tokenAccountDao.getAllFullAccounts().map { it.fullTokenAccount }
 
-    fun tokenAccountExists(tokenAddress: String): Boolean =
-        tokenAccountDao.getByTokenAddress(tokenAddress) != null
+    fun tokenAccountExists(mintAddress: String): Boolean =
+        tokenAccountDao.getByMintAddress(mintAddress) != null
 
     fun addTokenAccount(tokenAccount: TokenAccount) {
         tokenAccountDao.insert(tokenAccount)

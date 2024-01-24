@@ -30,15 +30,14 @@ class BalanceManager(
     var balance: Long? = storage.getBalance()
         private set
 
-    fun start() {
-        syncState = SolanaKit.SyncState.Syncing()
-    }
 
     fun stop(error: Throwable? = null) {
         syncState = SolanaKit.SyncState.NotSynced(error ?: SolanaKit.SyncError.NotStarted())
     }
 
     fun sync() {
+        if (syncState is SolanaKit.SyncState.Syncing) return
+
         syncState = SolanaKit.SyncState.Syncing()
 
         rpcClient.getBalance(publicKey) { result ->
