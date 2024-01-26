@@ -22,6 +22,12 @@ class TransactionStorage(
     fun lastNonPendingTransaction(): Transaction? =
         transactionsDao.lastNonPendingTransaction()
 
+    fun pendingTransactions(): List<Transaction> =
+        transactionsDao.pendingTransactions()
+
+    fun updateTransactions(transactions: List<Transaction>) =
+        transactionsDao.updateTransactions(transactions)
+
     fun addTransactions(transactions: List<FullTransaction>) {
         transactionsDao.insertTransactions(transactions.map { it.transaction })
 

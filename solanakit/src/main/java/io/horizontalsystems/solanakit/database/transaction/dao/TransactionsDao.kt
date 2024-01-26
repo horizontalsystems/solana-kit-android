@@ -14,11 +14,17 @@ interface TransactionsDao {
     @Query("SELECT * FROM `Transaction` WHERE NOT pending ORDER BY timestamp DESC LIMIT 1")
     fun lastNonPendingTransaction() : Transaction?
 
+    @Query("SELECT * FROM `Transaction` WHERE pending ORDER BY timestamp")
+    fun pendingTransactions() : List<Transaction>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTransactions(transactions: List<Transaction>)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertTokenTransfers(tokenTransfers: List<TokenTransfer>)
+
+    @Update
+    fun updateTransactions(transactions: List<Transaction>)
 
     @RawQuery
     suspend fun getTransactions(query: SupportSQLiteQuery): List<FullTransactionWrapper>
