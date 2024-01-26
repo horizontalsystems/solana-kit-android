@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 import java.math.BigDecimal
 
 @Entity
-class Transaction(
+data class Transaction(
     @PrimaryKey
     val hash: String,
     val timestamp: Long,

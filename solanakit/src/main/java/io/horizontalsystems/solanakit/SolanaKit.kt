@@ -23,6 +23,7 @@ import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
+import io.horizontalsystems.solanakit.transactions.PendingTransactionSyncer
 import io.horizontalsystems.solanakit.transactions.SolanaFmService
 import io.horizontalsystems.solanakit.transactions.SolscanClient
 import io.horizontalsystems.solanakit.transactions.TransactionManager
@@ -263,13 +264,15 @@ class SolanaKit(
             val solscanClient = SolscanClient(solscanApiKey, debug)
             val tokenAccountManager = TokenAccountManager(addressString, rpcApiClient, transactionStorage, mainStorage, SolanaFmService())
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager)
+            val pendingTransactionSyncer = PendingTransactionSyncer(rpcApiClient, transactionStorage, transactionManager)
             val transactionSyncer = TransactionSyncer(
                 address.publicKey,
                 rpcApiClient,
                 solscanClient,
                 nftClient,
                 transactionStorage,
-                transactionManager
+                transactionManager,
+                pendingTransactionSyncer
             )
 
             val syncManager = SyncManager(apiSyncer, balanceManager, tokenAccountManager, transactionSyncer, transactionManager)
