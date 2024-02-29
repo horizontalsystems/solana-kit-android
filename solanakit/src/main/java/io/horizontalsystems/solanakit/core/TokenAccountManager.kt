@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.core
 
+import android.util.Log
 import com.solana.api.Api
 import com.solana.api.getMultipleAccounts
 import com.solana.core.PublicKey
@@ -62,6 +63,7 @@ class TokenAccountManager(
         syncState = SolanaKit.SyncState.NotSynced(error ?: SolanaKit.SyncError.NotStarted())
     }
 
+    @Throws(Exception::class)
     private suspend fun fetchTokenAccounts(walletAddress: String) {
         val tokenAccounts = solanaFmService.tokenAccounts(walletAddress)
         val mintAccounts = tokenAccounts.map { MintAccount(it.mintAddress, it.decimals) }
@@ -73,9 +75,14 @@ class TokenAccountManager(
     suspend fun sync(tokenAccounts: List<TokenAccount>? = null) {
         syncState = SolanaKit.SyncState.Syncing()
 
-        val initialSync = mainStorage.isInitialSync()
+        var initialSync = mainStorage.isInitialSync()
         if (initialSync) {
-            fetchTokenAccounts(walletAddress)
+            try {
+                fetchTokenAccounts(walletAddress)
+            } catch (e: Exception) {
+                initialSync = false
+                Log.e("TokenAccountManager", "fetchTokenAccounts error: ", e)
+            }
         }
 
         val tokenAccounts = tokenAccounts ?: storage.getTokenAccounts()
