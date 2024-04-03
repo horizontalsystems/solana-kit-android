@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.transactions
 
+import android.util.Log
 import com.solana.actions.Action
 import com.solana.actions.sendSOL
 import com.solana.actions.sendSPLTokens
@@ -151,7 +152,11 @@ class TransactionManager(
                 account = signerAccount,
                 allowUnfundedRecipient = true
             ) { result ->
+
                 result.onSuccess { transactionHash ->
+
+                    Log.e("e", "send spl success txhash=$transactionHash")
+
                     val fullTransaction = FullTransaction(
                         Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, pending = true),
                         listOf(
@@ -168,6 +173,7 @@ class TransactionManager(
                 }
 
                 result.onFailure {
+                    Log.e("e", "send spl error ${it.message}", it)
                     continuation.resumeWithException(it)
                 }
             }

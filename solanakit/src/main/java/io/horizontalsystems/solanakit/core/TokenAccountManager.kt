@@ -4,6 +4,7 @@ import android.util.Log
 import com.solana.api.Api
 import com.solana.api.getMultipleAccounts
 import com.solana.core.PublicKey
+import com.solana.models.TokenResultObjects
 import com.solana.models.buffer.AccountInfo
 import com.solana.models.buffer.BufferInfo
 import io.horizontalsystems.solanakit.SolanaKit
@@ -65,8 +66,12 @@ class TokenAccountManager(
 
     @Throws(Exception::class)
     private suspend fun fetchTokenAccounts(walletAddress: String) {
+
+        Log.e("e", "fetchTokenAccounts")
         val tokenAccounts = solanaFmService.tokenAccounts(walletAddress)
+        Log.e("e", "tokenAccounts = ${tokenAccounts.joinToString { it.address }}")
         val mintAccounts = tokenAccounts.map { MintAccount(it.mintAddress, it.decimals) }
+
 
         storage.saveTokenAccounts(tokenAccounts)
         storage.saveMintAccounts(mintAccounts)
@@ -76,6 +81,10 @@ class TokenAccountManager(
         syncState = SolanaKit.SyncState.Syncing()
 
         var initialSync = mainStorage.isInitialSync()
+
+        Log.e("e", "TokenAccountManager.sync()\n--tokenAccounts = ${tokenAccounts?.joinToString { it.address }}\n--initialSync = $initialSync")
+
+
         if (initialSync) {
             try {
                 fetchTokenAccounts(walletAddress)
@@ -90,12 +99,33 @@ class TokenAccountManager(
 
         val publicKeys = tokenAccounts.map { PublicKey.valueOf(it.address) }
 
+//        val singles = publicKeys.map { publicKey -> rpcClient.getTokenAccountBalance(publicKey).map { Pair(publicKey, it) } }
+//        val multiple = Single.zip(singles) {
+//            it.filterIsInstance<Pair<PublicKey, TokenResultObjects.TokenAmountInfo>>()
+//        }
+//
+//        val result = multiple.blockingGet()
+
+//        publicKeys.forEach { publicKey ->
+//            rpcClient.getTokenAccountBalance(publicKey) {
+//                it.onSuccess {
+//                    Log.e("e", "$publicKey success = ${it.amount}")
+//                }
+//                it.onFailure {
+//                    Log.e("e", "$publicKey error", it)
+//                }
+//            }
+//    }
+//        handleBalanceX(tokenAccounts, result.map { it.second }, initialSync)
+
         rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java) { result ->
             result.onSuccess { result ->
+                Log.e("e", "multipleAccounts success")
                 handleBalance(tokenAccounts, result, initialSync)
             }
 
             result.onFailure {
+                Log.e("e", "multipleAccounts error", it)
                 syncState = SolanaKit.SyncState.NotSynced(it)
             }
         }
@@ -118,6 +148,42 @@ class TokenAccountManager(
 
     fun tokenAccounts(): List<FullTokenAccount> =
         storage.getFullTokenAccounts()
+
+
+    private fun handleBalanceX(
+        tokenAccounts: List<TokenAccount>,
+        tokenAmountsInfo: List<TokenResultObjects.TokenAmountInfo>,
+        initialSync: Boolean
+    ) {
+        val updatedTokenAccounts = mutableListOf<TokenAccount>()
+
+        for ((index, tokenAccount) in tokenAccounts.withIndex()) {
+            tokenAmountsInfo[index].let { tokenAmountInfo ->
+
+                val balance = tokenAmountInfo.uiAmount?.toBigDecimal()?.movePointRight(tokenAmountInfo.decimals) ?: tokenAccount.balance
+                updatedTokenAccounts.add(TokenAccount(tokenAccount.address, tokenAccount.mintAddress, balance, tokenAccount.decimals))
+
+                Log.e(
+                    "e", "token: ${tokenAccount.address}, " +
+                            "amount: ${tokenAmountInfo.amount}, " +
+                            "decimals: ${tokenAmountInfo.decimals}, " +
+                            "uiAmount: ${tokenAmountInfo.uiAmount?.toBigDecimal()}, " +
+                            "uiAmountString: ${tokenAmountInfo.uiAmountString} "
+                )
+            }
+//            tokenAccountsBufferInfo[index]?.let { account ->
+//                val balance = account.data?.value?.lamports?.toBigDecimal() ?: tokenAccount.balance
+//                updatedTokenAccounts.add(TokenAccount(tokenAccount.address, tokenAccount.mintAddress, balance, tokenAccount.decimals))
+//            }
+        }
+
+        storage.saveTokenAccounts(updatedTokenAccounts)
+        _tokenAccountsUpdatedFlow.tryEmit(storage.getFullTokenAccounts())
+        syncState = SolanaKit.SyncState.Synced()
+        if (initialSync) {
+            handleNewTokenAccounts(updatedTokenAccounts)
+        }
+    }
 
     private fun handleBalance(
         tokenAccounts: List<TokenAccount>,

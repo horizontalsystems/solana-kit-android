@@ -26,7 +26,7 @@ class SolanaFmService {
 
     init {
         val loggingInterceptor = HttpLoggingInterceptor { message -> logger.info(message) }
-            .setLevel(HttpLoggingInterceptor.Level.BASIC)
+            .setLevel(HttpLoggingInterceptor.Level.BODY)
 
         val httpClient = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
@@ -50,7 +50,7 @@ class SolanaFmService {
         val response = api.legacyTokenAccounts(address).await()
 
         return response.tokens.values.map { token ->
-            TokenAccount(token.ata, token.mint, token.balance, token.tokenData.decimals)
+            TokenAccount(token.ata, token.mint, token.balance.movePointRight(token.tokenData.decimals), token.tokenData.decimals)
         }
     }
 

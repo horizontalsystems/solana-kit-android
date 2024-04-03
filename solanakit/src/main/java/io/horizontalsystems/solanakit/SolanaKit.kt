@@ -2,13 +2,22 @@ package io.horizontalsystems.solanakit
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountJsonAdapterFactory
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountRule
 import com.solana.actions.Action
 import com.solana.api.Api
+import com.solana.core.PublicKey
+import com.solana.models.buffer.AccountInfo
+import com.solana.models.buffer.Buffer
+import com.solana.models.buffer.BufferInfo
+import com.solana.networking.MoshiAdapterFactory
 import com.solana.networking.Network
 import com.solana.networking.NetworkingRouterConfig
 import com.solana.networking.OkHttpNetworkingRouter
+import com.solana.vendor.borshj.Borsh
+import com.squareup.moshi.FromJson
+import com.squareup.moshi.ToJson
 import io.horizontalsystems.solanakit.core.BalanceManager
 import io.horizontalsystems.solanakit.core.ISyncListener
 import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
@@ -41,6 +50,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.util.Objects
 
 class SolanaKit(
@@ -230,6 +240,7 @@ class SolanaKit(
     companion object {
 
         val fee = BigDecimal(0.000005)
+
         // Solana network will not store a SOL account with less than ~0.001 SOL.
         // Which means you can't have a SOL account with 0 SOL stored on the network.
         val accountRentAmount = BigDecimal(0.001)
@@ -244,7 +255,10 @@ class SolanaKit(
             debug: Boolean = false
         ): SolanaKit {
             val httpClient = httpClient(debug)
-            val config = NetworkingRouterConfig(listOf(MetadataAccountRule()), listOf(MetadataAccountJsonAdapterFactory()))
+            val config = NetworkingRouterConfig(
+                listOf(MetadataAccountRule()),
+                listOf(MetadataAccountJsonAdapterFactory(), BufferInfoJsonAdapterFactory())
+            )
             val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
             val connectionManager = ConnectionManager(application)
 
@@ -305,6 +319,41 @@ class SolanaKit(
             return client.build()
         }
 
+    }
+
+}
+
+class BufferInfoJsonAdapterFactory : MoshiAdapterFactory {
+    override fun create(borsh: Borsh): Object {
+        return BufferInfoJsonAdapter(borsh)
+    }
+}
+
+data class HSBufferInfoJson<T>(
+    val data: T?,
+    val lamports: Long,
+    val owner: PublicKey,
+    val executable: Boolean,
+    val rentEpoch: String
+)
+
+class BufferInfoJsonAdapter(val borsh: Borsh): Object() {
+    @FromJson
+    fun fromJson(bufferInfoJson: HSBufferInfoJson<Any>): BufferInfo<AccountInfo> {
+        Log.e("e", "BufferInfoJsonAdapter.fromJson()")
+        return BufferInfo(
+            data = bufferInfoJson.data?.let { Buffer.create(borsh, it, AccountInfo::class.java) },
+            executable = bufferInfoJson.executable,
+            lamports = bufferInfoJson.lamports,
+            owner = bufferInfoJson.owner.toBase58(),
+            rentEpoch = 0//bufferInfoJson.rentEpoch.
+        )
+    }
+
+    @ToJson
+    fun toJson(accountInfoBufferInfo: BufferInfo<AccountInfo>): String {
+        Log.e("e", "BufferInfoJsonAdapter.toJson()")
+        throw UnsupportedOperationException()
     }
 
 }
