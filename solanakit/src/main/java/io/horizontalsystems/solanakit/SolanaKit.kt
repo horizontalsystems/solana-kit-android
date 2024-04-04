@@ -50,7 +50,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
-import java.math.BigInteger
+import java.net.URL
 import java.util.Objects
 
 class SolanaKit(
@@ -259,7 +259,10 @@ class SolanaKit(
                 listOf(MetadataAccountRule()),
                 listOf(MetadataAccountJsonAdapterFactory(), BufferInfoJsonAdapterFactory())
             )
-            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
+            val custom = RpcSource.Custom("QuickNode", URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), 30)
+            val router = OkHttpNetworkingRouter(custom.endpoint, httpClient, config)
+
+//            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
             val connectionManager = ConnectionManager(application)
 
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)
@@ -340,13 +343,22 @@ data class HSBufferInfoJson<T>(
 class BufferInfoJsonAdapter(val borsh: Borsh): Object() {
     @FromJson
     fun fromJson(bufferInfoJson: HSBufferInfoJson<Any>): BufferInfo<AccountInfo> {
-        Log.e("e", "BufferInfoJsonAdapter.fromJson()")
+
+        val convertedRentEpoch = bufferInfoJson.rentEpoch.toULong().toLong()
+
+        Log.e("e", "BufferInfoJsonAdapter.fromJson() " +
+                "rentEpoch = ${bufferInfoJson.rentEpoch}\n" +
+                "long max=${Long.MAX_VALUE}\n" +
+                "converted value=${convertedRentEpoch}")
+
+        val rentEpoch = bufferInfoJson.rentEpoch.toULong()
+        rentEpoch.toLong()
         return BufferInfo(
             data = bufferInfoJson.data?.let { Buffer.create(borsh, it, AccountInfo::class.java) },
             executable = bufferInfoJson.executable,
             lamports = bufferInfoJson.lamports,
             owner = bufferInfoJson.owner.toBase58(),
-            rentEpoch = 0//bufferInfoJson.rentEpoch.
+            rentEpoch = convertedRentEpoch
         )
     }
 
