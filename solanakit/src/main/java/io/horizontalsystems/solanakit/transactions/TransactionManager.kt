@@ -2,17 +2,40 @@ package io.horizontalsystems.solanakit.transactions
 
 import android.util.Log
 import com.solana.actions.Action
-import com.solana.actions.sendSOL
 import com.solana.actions.sendSPLTokens
 import com.solana.core.Account
 import com.solana.core.PublicKey
+import io.horizontalsystems.solanakit.Signer
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
-import io.horizontalsystems.solanakit.models.*
-import kotlinx.coroutines.flow.*
+import io.horizontalsystems.solanakit.models.Address
+import io.horizontalsystems.solanakit.models.FullTokenTransfer
+import io.horizontalsystems.solanakit.models.FullTransaction
+import io.horizontalsystems.solanakit.models.TokenAccount
+import io.horizontalsystems.solanakit.models.TokenTransfer
+import io.horizontalsystems.solanakit.models.Transaction
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
+import org.sol4k.Connection
+import org.sol4k.Keypair
+import org.sol4k.RpcUrl
+import org.sol4k.instruction.TransferInstruction
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.lang.IllegalStateException
 import java.math.BigDecimal
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
+import java.util.Base64
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -116,12 +139,73 @@ class TransactionManager(
             fullTokenTransfer.tokenTransfer.incoming == incoming
         }
 
-    suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction = suspendCoroutine { continuation ->
-        rpcAction.sendSOL(signerAccount, toAddress.publicKey, amount) { result ->
-            result.onSuccess { transactionHash ->
+    private fun sendTransactionX(transaction: org.sol4k.Transaction): String {
+        val encodedTransaction = Base64.getEncoder().encodeToString(transaction.serialize())
+
+        Log.e("e", "encodedTransaction: $encodedTransaction")
+
+        return rpcCall(
+            "sendTransaction",
+            listOf(
+                Json.encodeToJsonElement(encodedTransaction),
+                Json.encodeToJsonElement(mapOf(
+                    "encoding" to "base64",
+                    "skipPreflight" to false,
+                    "preflightCommitment" to "confirmed",
+                    "maxRetries" to 100
+                )),
+            )
+        )
+    }
+
+    private inline fun <reified T, reified I : Any> rpcCall(method: String, params: List<I>): T {
+        val connection = URL(RpcUrl.MAINNNET.value).openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        connection.outputStream.use {
+            val body = Json.encodeToString(
+                com.solana.networking.models.RpcRequest(method, params)
+            )
+            Log.e("e", "send request body: $body")
+
+            it.write(body.toByteArray())
+        }
+        val responseBody = connection.inputStream.use {
+            BufferedReader(InputStreamReader(it)).use { reader ->
+                reader.readText()
+            }
+        }
+        connection.disconnect()
+        try {
+//            val (result) = jsonParser.decodeFromString<RpcResponse<T>>(responseBody)
+            Log.e("e", "send response body: $responseBody")
+            return "result" as T
+        } catch (e: SerializationException) {
+            Log.e("e", "send error: $responseBody", e)
+//            val (error) = jsonParser.decodeFromString<RpcErrorResponse>(responseBody)
+//            throw RpcException(error.code, error.message, responseBody)
+            throw IllegalStateException(e.message)
+        }
+    }
+
+
+    suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account, signer: Signer): FullTransaction =
+        suspendCoroutine { continuation ->
+            val connection = Connection(RpcUrl.MAINNNET)
+            val blockhash = connection.getLatestBlockhash()
+            val sender = Keypair.fromSecretKey(signer.privateKey)
+            val receiver = org.sol4k.PublicKey(toAddress.toString())
+            val instruction = TransferInstruction(sender.publicKey, receiver, lamports = 1000)
+            val transaction = org.sol4k.Transaction(blockhash, instruction, feePayer = sender.publicKey)
+            transaction.sign(sender)
+
+            try {
+                val signature = sendTransactionX(transaction)
+
                 val fullTransaction = FullTransaction(
                     Transaction(
-                        transactionHash, Instant.now().epochSecond, SolanaKit.fee,
+                        signature, Instant.now().epochSecond, SolanaKit.fee,
                         addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal(),
                         pending = true
                     ),
@@ -131,13 +215,32 @@ class TransactionManager(
                 storage.addTransactions(listOf(fullTransaction))
                 continuation.resume(fullTransaction)
                 _transactionsFlow.tryEmit(listOf(fullTransaction))
+
+            } catch (error: Throwable) {
+                continuation.resumeWithException(error)
             }
 
-            result.onFailure {
-                continuation.resumeWithException(it)
-            }
+//            rpcAction.sendSOL(signerAccount, toAddress.publicKey, amount) { result ->
+//                result.onSuccess { transactionHash ->
+//                    val fullTransaction = FullTransaction(
+//                        Transaction(
+//                            transactionHash, Instant.now().epochSecond, SolanaKit.fee,
+//                            addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal(),
+//                            pending = true
+//                        ),
+//                        listOf()
+//                    )
+//
+//                    storage.addTransactions(listOf(fullTransaction))
+//                    continuation.resume(fullTransaction)
+//                    _transactionsFlow.tryEmit(listOf(fullTransaction))
+//                }
+//
+//                result.onFailure {
+//                    continuation.resumeWithException(it)
+//                }
+//            }
         }
-    }
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
         val mintAddressString = mintAddress.publicKey.toBase58()

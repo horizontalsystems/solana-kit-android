@@ -187,8 +187,9 @@ class SolanaKit(
     ): List<FullTransaction> =
         transactionManager.getSplTransaction(mintAddress, incoming, fromHash, limit)
 
-    suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction =
-        transactionManager.sendSol(toAddress, amount, signer.account)
+    suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction {
+     return transactionManager.sendSol(toAddress, amount, signer.account, signer)
+    }
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
         transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
@@ -259,10 +260,10 @@ class SolanaKit(
                 listOf(MetadataAccountRule()),
                 listOf(MetadataAccountJsonAdapterFactory(), BufferInfoJsonAdapterFactory())
             )
-            val custom = RpcSource.Custom("QuickNode", URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), 30)
-            val router = OkHttpNetworkingRouter(custom.endpoint, httpClient, config)
+//            val custom = RpcSource.Custom("QuickNode", URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), URL("https://sly-snowy-sunset.solana-mainnet.quiknode.pro/930f2856547714bc09eefc339f0ea7e461a5746c"), 30)
+//            val router = OkHttpNetworkingRouter(custom.endpoint, httpClient, config)
 
-//            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
+            val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
             val connectionManager = ConnectionManager(application)
 
             val mainDatabase = SolanaDatabaseManager.getMainDatabase(application, walletId)

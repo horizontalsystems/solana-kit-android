@@ -6,14 +6,15 @@ import com.solana.vendor.TweetNaclFast
 import com.solana.vendor.bip32.wallet.DerivableType
 import com.solana.vendor.bip32.wallet.SolanaBip44
 
-class Signer(internal val account: Account) {
+class Signer(internal val account: Account, internal val privateKey: ByteArray) {
 
     companion object {
 
         fun getInstance(seed: ByteArray): Signer {
-            val account = account(privateKey(seed))
+            val privateKey = privateKey(seed)
+            val account = account(privateKey)
 
-            return Signer(account)
+            return Signer(account, privateKey)
         }
 
         fun address(seed: ByteArray): String {
