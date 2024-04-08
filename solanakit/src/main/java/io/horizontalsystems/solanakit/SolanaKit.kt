@@ -188,7 +188,7 @@ class SolanaKit(
         transactionManager.getSplTransaction(mintAddress, incoming, fromHash, limit)
 
     suspend fun sendSol(toAddress: Address, amount: Long, signer: Signer): FullTransaction {
-     return transactionManager.sendSol(toAddress, amount, signer.account, signer)
+     return transactionManager.sendSol(toAddress, amount, signer.account)
     }
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
