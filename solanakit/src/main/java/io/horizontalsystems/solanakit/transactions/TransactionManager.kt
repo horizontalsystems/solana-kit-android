@@ -4,6 +4,7 @@ import android.util.Log
 import com.solana.actions.Action
 import com.solana.core.Account
 import com.solana.core.PublicKey
+import com.solana.core.TransactionInstruction
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
@@ -18,11 +19,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.rx2.await
+import org.sol4k.Connection
+import org.sol4k.RpcUrl
+import org.sol4k.api.Commitment
 import java.math.BigDecimal
 import java.time.Instant
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 class TransactionManager(
     private val address: Address,
@@ -85,8 +87,9 @@ class TransactionManager(
                             to = syncedTxHeader.to ?: existingTxHeader.to,
                             amount = syncedTxHeader.amount ?: existingTxHeader.amount,
                             error = syncedTxHeader.error,
-                            pending = false
-                        ),
+                            pending = syncedTxHeader.pending,
+
+                            ),
                         tokenTransfers = syncedTx.tokenTransfers.ifEmpty {
                             for (tokenTransfer in existingTx.tokenTransfers) {
                                 existingMintAddresses.add(tokenTransfer.mintAccount.address)
@@ -107,6 +110,10 @@ class TransactionManager(
         }
     }
 
+    fun notifyTransactionsUpdate(transactions: List<FullTransaction>) {
+        _transactionsFlow.tryEmit(transactions)
+    }
+
     private fun hasSolTransfer(fullTransaction: FullTransaction, incoming: Boolean?): Boolean {
         val amount = fullTransaction.transaction.amount ?: return false
         val incoming = incoming ?: return true
@@ -123,17 +130,17 @@ class TransactionManager(
             fullTokenTransfer.tokenTransfer.incoming == incoming
         }
 
-    suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction =
-        suspendCoroutine { continuation ->
-//            val connection = Connection(RpcUrl.MAINNNET)
-//
+    suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
+        val connection = Connection(RpcUrl.MAINNNET)
 //            val sender = Keypair.fromSecretKey(signer.privateKey)
 //            val receiver = org.sol4k.PublicKey(toAddress.toString())
 //            val instruction = TransferInstruction(sender.publicKey, receiver, amount)
 //            val computeUnitLimit = ComputeBudgetProgram.setComputeUnitLimit(units = 200_000)
 //            val computeUnitPrice = ComputeBudgetProgram.setComputeUnitPrice(microLamports = 5_000)
 //
-//            val blockhash = connection.getLatestBlockhash()
+        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        Log.e("e", "latestBlockHash: ${blockHash.blockhash}, slot: ${blockHash.slot}, lastValidBlockHeight: ${blockHash.lastValidBlockHeight}")
+
 //            val transaction = org.sol4k.Transaction(blockhash, listOf(computeUnitLimit, computeUnitPrice, instruction), feePayer = sender.publicKey)
 //            transaction.sign(sender)
 //
@@ -156,39 +163,42 @@ class TransactionManager(
 //                continuation.resumeWithException(error)
 //            }
 
-            val computeUnitLimit = ComputeBudgetProgram.setComputeUnitLimit(units = 300_000)
-            val computeUnitPrice = ComputeBudgetProgram.setComputeUnitPrice(microLamports = 50_000)
-            val instructions = listOf(computeUnitLimit, computeUnitPrice)
+        val (transactionHash, base64Encoded) = rpcAction.sendSOL(
+            account = signerAccount,
+            destination = toAddress.publicKey,
+            amount = amount,
+            instructions = priorityFeeInstructions(),
+            recentBlockHash = blockHash.blockhash
+        ).await()
 
-            rpcAction.sendSOL(
-                account = signerAccount,
-                destination = toAddress.publicKey,
-                amount = amount,
-                instructions = instructions
-            ) { result ->
-                result.onSuccess { transactionHash ->
+        Log.e("e", "send success new, hash = $transactionHash")
+        val fullTransaction = FullTransaction(
+            Transaction(
+                hash = transactionHash,
+                timestamp = Instant.now().epochSecond,
+                fee = SolanaKit.fee,
+                from = addressString,
+                to = toAddress.publicKey.toBase58(),
+                amount = amount.toBigDecimal(),
+                pending = true,
+                blockHash = blockHash.blockhash,
+                lastValidBlockHeight = blockHash.lastValidBlockHeight,
+                base64Encoded = base64Encoded
+            ),
+            listOf()
+        )
 
-                    Log.e("e", "send success new, hash = $transactionHash")
-                    val fullTransaction = FullTransaction(
-                        Transaction(
-                            transactionHash, Instant.now().epochSecond, SolanaKit.fee,
-                            addressString, toAddress.publicKey.toBase58(), amount.toBigDecimal(),
-                            pending = true
-                        ),
-                        listOf()
-                    )
+        storage.addTransactions(listOf(fullTransaction))
+        _transactionsFlow.tryEmit(listOf(fullTransaction))
 
-                    storage.addTransactions(listOf(fullTransaction))
-                    continuation.resume(fullTransaction)
-                    _transactionsFlow.tryEmit(listOf(fullTransaction))
-                }
+        return fullTransaction
+    }
 
-                result.onFailure {
-                    Log.e("e", "send error new", it)
-                    continuation.resumeWithException(it)
-                }
-            }
-        }
+    private fun priorityFeeInstructions(): List<TransactionInstruction> {
+        val computeUnitLimit = ComputeBudgetProgram.setComputeUnitLimit(units = 300_000)
+        val computeUnitPrice = ComputeBudgetProgram.setComputeUnitPrice(microLamports = 500_000)
+        return listOf(computeUnitLimit, computeUnitPrice)
+    }
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
         val mintAddressString = mintAddress.publicKey.toBase58()
@@ -197,46 +207,45 @@ class TransactionManager(
         val tokenAccount = fullTokenAccount.tokenAccount
         val mintAccount = fullTokenAccount.mintAccount
 
-        return suspendCoroutine { continuation ->
-            val computeUnitLimit = ComputeBudgetProgram.setComputeUnitLimit(units = 300_000)
-            val computeUnitPrice = ComputeBudgetProgram.setComputeUnitPrice(microLamports = 50_000)
-            val instructions = listOf(computeUnitLimit, computeUnitPrice)
+        val connection = Connection(RpcUrl.MAINNNET)
+        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        Log.e("e", "latestBlockHash: ${blockHash.blockhash}, slot: ${blockHash.slot}, lastValidBlockHeight: ${blockHash.lastValidBlockHeight}")
 
-            rpcAction.sendSPLTokens(
-                mintAddress = mintAddress.publicKey,
-                fromPublicKey = PublicKey(tokenAccount.address),
-                destinationAddress = toAddress.publicKey,
-                amount = amount,
-                account = signerAccount,
-                allowUnfundedRecipient = true,
-                instructions = instructions
-            ) { result ->
+        val (transactionHash, base64Trx) = rpcAction.sendSPLTokens(
+            mintAddress = mintAddress.publicKey,
+            fromPublicKey = PublicKey(tokenAccount.address),
+            destinationAddress = toAddress.publicKey,
+            amount = amount,
+            account = signerAccount,
+            allowUnfundedRecipient = true,
+            instructions = priorityFeeInstructions(),
+            recentBlockHash = blockHash.blockhash
+        ).await()
 
-                result.onSuccess { transactionHash ->
+        Log.e("e", "send spl success txhash=$transactionHash")
 
-                    Log.e("e", "send spl success txhash=$transactionHash")
+        val fullTransaction = FullTransaction(
+            Transaction(
+                hash = transactionHash,
+                timestamp = Instant.now().epochSecond,
+                fee = SolanaKit.fee,
+                pending = true,
+                blockHash = blockHash.blockhash,
+                lastValidBlockHeight = blockHash.lastValidBlockHeight,
+                base64Encoded = base64Trx
+            ),
+            listOf(
+                FullTokenTransfer(
+                    TokenTransfer(transactionHash, mintAddressString, false, amount.toBigDecimal()),
+                    mintAccount
+                )
+            )
+        )
 
-                    val fullTransaction = FullTransaction(
-                        Transaction(transactionHash, Instant.now().epochSecond, SolanaKit.fee, pending = true),
-                        listOf(
-                            FullTokenTransfer(
-                                TokenTransfer(transactionHash, mintAddressString, false, amount.toBigDecimal()),
-                                mintAccount
-                            )
-                        )
-                    )
+        storage.addTransactions(listOf(fullTransaction))
+        _transactionsFlow.tryEmit(listOf(fullTransaction))
 
-                    storage.addTransactions(listOf(fullTransaction))
-                    continuation.resume(fullTransaction)
-                    _transactionsFlow.tryEmit(listOf(fullTransaction))
-                }
-
-                result.onFailure {
-                    Log.e("e", "send spl error ${it.message}", it)
-                    continuation.resumeWithException(it)
-                }
-            }
-        }
+        return fullTransaction
     }
 
 }

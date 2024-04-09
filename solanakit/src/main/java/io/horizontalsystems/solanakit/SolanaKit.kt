@@ -125,6 +125,8 @@ class SolanaKit(
     }
 
     fun refresh() {
+        Log.e("e", "SolanaKit.refresh() scope.isActive= ${scope?.isActive}")
+
         if (scope?.isActive != true) return
 
         scope?.launch {
@@ -240,7 +242,7 @@ class SolanaKit(
 
     companion object {
 
-        val fee = BigDecimal(0.000005)
+        val fee = BigDecimal(0.000155)
 
         // Solana network will not store a SOL account with less than ~0.001 SOL.
         // Which means you can't have a SOL account with 0 SOL stored on the network.
@@ -347,10 +349,10 @@ class BufferInfoJsonAdapter(val borsh: Borsh): Object() {
 
         val convertedRentEpoch = bufferInfoJson.rentEpoch.toULong().toLong()
 
-        Log.e("e", "BufferInfoJsonAdapter.fromJson() " +
-                "rentEpoch = ${bufferInfoJson.rentEpoch}\n" +
-                "long max=${Long.MAX_VALUE}\n" +
-                "converted value=${convertedRentEpoch}")
+//        Log.e("e", "BufferInfoJsonAdapter.fromJson() " +
+//                "rentEpoch = ${bufferInfoJson.rentEpoch}\n" +
+//                "long max=${Long.MAX_VALUE}\n" +
+//                "converted value=${convertedRentEpoch}")
 
         val rentEpoch = bufferInfoJson.rentEpoch.toULong()
         rentEpoch.toLong()

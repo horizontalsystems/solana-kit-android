@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.core
 
+import android.util.Log
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.IApiSyncerListener
@@ -8,6 +9,7 @@ import io.horizontalsystems.solanakit.transactions.ITransactionListener
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 interface ISyncListener {
@@ -62,6 +64,8 @@ class SyncManager(
     }
 
     suspend fun refresh(scope: CoroutineScope) {
+        Log.e("e", "SyncManager.refresh() $apiSyncer.state")
+
         if (apiSyncer.state !is SyncerState.Ready) {
             apiSyncer.stop()
             apiSyncer.start(scope)
@@ -113,6 +117,8 @@ class SyncManager(
     }
 
     override fun didUpdateLastBlockHeight(lastBlockHeight: Long) {
+
+        Log.e("e", "SyncManager.didUpdateLastBlockHeight $lastBlockHeight, scope = ${scope?.isActive}")
         scope?.launch {
             listener?.onUpdateLastBlockHeight(lastBlockHeight)
 

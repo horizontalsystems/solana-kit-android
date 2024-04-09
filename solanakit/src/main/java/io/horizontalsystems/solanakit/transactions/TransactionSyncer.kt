@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.transactions
 
+import android.util.Log
 import com.metaplex.lib.programs.token_metadata.TokenMetadataProgram
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccount
 import com.metaplex.lib.programs.token_metadata.accounts.MetaplexTokenStandard.FungibleAsset
@@ -51,6 +52,8 @@ class TransactionSyncer(
     var listener: ITransactionListener? = null
 
     suspend fun sync() {
+
+        Log.e("e", "TransactionSyncer.sync() $syncState")
         if (syncState is SolanaKit.SyncState.Syncing) return
 
         syncState = SolanaKit.SyncState.Syncing()
@@ -87,12 +90,20 @@ class TransactionSyncer(
 //        }
     }
 
-    private fun merge(rpcSignatureInfos: List<SignatureInfo>, solscanTxsMap: List<SolscanTransaction>, mintAccounts: Map<String, MintAccount>): List<FullTransaction> {
+    private fun merge(
+        rpcSignatureInfos: List<SignatureInfo>,
+        solscanTxsMap: List<SolscanTransaction>,
+        mintAccounts: Map<String, MintAccount>
+    ): List<FullTransaction> {
         val transactions = mutableMapOf<String, FullTransaction>()
 
         for (signatureInfo in rpcSignatureInfos) {
             signatureInfo.blockTime?.let { blockTime ->
-                val transaction = Transaction(signatureInfo.signature, blockTime, error = signatureInfo.err?.toString())
+                val transaction = Transaction(
+                    hash = signatureInfo.signature,
+                    timestamp = blockTime,
+                    error = signatureInfo.err?.toString(),
+                )
                 transactions[signatureInfo.signature] = FullTransaction(transaction, listOf())
             }
         }
@@ -102,13 +113,13 @@ class TransactionSyncer(
                 val existingTransaction = transactions[hash]?.transaction
                 val solscanTx = solscanTxs.first()
                 val mergedTransaction = Transaction(
-                    hash,
-                    existingTransaction?.timestamp ?: solscanTx.blockTime,
-                    solscanTx.fee?.toBigDecimalOrNull(),
-                    solscanTx.solTransferSource,
-                    solscanTx.solTransferDestination,
-                    solscanTx.solAmount?.toBigDecimal(),
-                    existingTransaction?.error
+                    hash = hash,
+                    timestamp = existingTransaction?.timestamp ?: solscanTx.blockTime,
+                    fee = solscanTx.fee?.toBigDecimalOrNull(),
+                    from = solscanTx.solTransferSource,
+                    to = solscanTx.solTransferDestination,
+                    amount = solscanTx.solAmount?.toBigDecimal(),
+                    error = existingTransaction?.error
                 )
 
                 val tokenTransfers: List<FullTokenTransfer> = solscanTxs.mapNotNull { solscanTx ->
@@ -145,19 +156,20 @@ class TransactionSyncer(
         return signatureObjects
     }
 
-    private suspend fun getSignaturesChunk(lastTransactionHash: String?, before: String? = null) = suspendCoroutine<List<SignatureInfo>> { continuation ->
-        rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash, before = before, limit = rpcSignaturesCount) { result ->
-            result.onSuccess { signatureObjects ->
-                continuation.resume(signatureObjects)
-            }
+    private suspend fun getSignaturesChunk(lastTransactionHash: String?, before: String? = null) =
+        suspendCoroutine<List<SignatureInfo>> { continuation ->
+            rpcClient.getSignaturesForAddress(publicKey, until = lastTransactionHash, before = before, limit = rpcSignaturesCount) { result ->
+                result.onSuccess { signatureObjects ->
+                    continuation.resume(signatureObjects)
+                }
 
-            result.onFailure { exception ->
-                continuation.resumeWithException(exception)
+                result.onFailure { exception ->
+                    continuation.resumeWithException(exception)
+                }
             }
         }
-    }
 
-    private suspend fun getMintAccounts(mintAddresses: List<String>) : Map<String, MintAccount> {
+    private suspend fun getMintAccounts(mintAddresses: List<String>): Map<String, MintAccount> {
         if (mintAddresses.isEmpty()) {
             return mutableMapOf()
         }

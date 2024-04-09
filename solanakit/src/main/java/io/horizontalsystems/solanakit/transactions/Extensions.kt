@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.transactions
 
+import android.util.Log
 import com.solana.actions.Action
 import com.solana.actions.findSPLTokenDestinationAddress
 import com.solana.actions.serializeAndSendWithFee
@@ -13,14 +14,16 @@ import com.solana.programs.TokenProgram
 import com.solana.vendor.ContResult
 import com.solana.vendor.ResultError
 import com.solana.vendor.flatMap
+import io.reactivex.Single
+import java.util.Base64
 
 fun Action.sendSOL(
     account: Account,
     destination: PublicKey,
     amount: Long,
     instructions: List<TransactionInstruction>,
-    onComplete: ((Result<String>) -> Unit)
-) {
+    recentBlockHash: String
+) = Single.create { emitter ->
     val transferInstruction = SystemProgram.transfer(account.publicKey, destination, amount)
     val transaction = Transaction()
 
@@ -30,11 +33,11 @@ fun Action.sendSOL(
 
     transaction.add(transferInstruction)
 
-    this.serializeAndSendWithFee(transaction, listOf(account), null) { result ->
+    this.serializeAndSendWithFee(transaction, listOf(account), recentBlockHash) { result ->
         result.onSuccess {
-            onComplete(Result.success(it))
+            emitter.onSuccess(Pair(it, encodeBase64(transaction)))
         }.onFailure {
-            onComplete(Result.failure(it))
+            emitter.onError(it)
         }
     }
 }
@@ -47,8 +50,8 @@ fun Action.sendSPLTokens(
     allowUnfundedRecipient: Boolean = false,
     account: Account,
     instructions: List<TransactionInstruction>,
-    onComplete: ((com.solana.vendor.Result<String, ResultError>) -> Unit)
-) {
+    recentBlockHash: String
+) = Single.create { emitter ->
     ContResult { cb ->
         this.findSPLTokenDestinationAddress(
             mintAddress,
@@ -85,14 +88,27 @@ fun Action.sendSPLTokens(
         transaction.add(sendInstruction)
         return@flatMap ContResult.success(transaction)
     }.flatMap { transaction ->
-        return@flatMap ContResult<String, ResultError> { cb ->
-            this.serializeAndSendWithFee(transaction, listOf(account)) { result ->
+        return@flatMap ContResult<Pair<String, String>, ResultError> { cb ->
+            this.serializeAndSendWithFee(transaction, listOf(account), recentBlockHash) { result ->
                 result.onSuccess {
-                    cb(com.solana.vendor.Result.success(it))
+                    cb(com.solana.vendor.Result.success(Pair(it, encodeBase64(transaction))))
                 }.onFailure {
                     cb(com.solana.vendor.Result.failure(ResultError(it)))
                 }
             }
         }
-    }.run(onComplete)
+    }.run { result ->
+        result.onSuccess {
+            emitter.onSuccess(it)
+        }.onFailure {
+            emitter.onError(it)
+        }
+    }
+}
+
+private fun encodeBase64(transaction: Transaction): String {
+    val serialized = transaction.serialize()
+    val base64Trx: String = Base64.getEncoder().encodeToString(serialized)
+    Log.e("e", "base64Trx: $base64Trx")
+    return base64Trx
 }
