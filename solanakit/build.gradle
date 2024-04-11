@@ -57,6 +57,8 @@ dependencies {
     implementation 'com.google.android.material:material:1.9.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
 
+    implementation 'org.sol4k:sol4k:0.4.1'
+
     implementation 'com.github.metaplex-foundation:metaplex-android:1.2.0'
     implementation 'com.github.metaplex-foundation:SolanaKT:1.2'
     implementation 'com.squareup.moshi:moshi-kotlin:1.14.0'

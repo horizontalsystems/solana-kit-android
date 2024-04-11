@@ -19,7 +19,7 @@ import io.horizontalsystems.solanakit.models.*
         Transaction::class,
         TokenAccount::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)

@@ -230,7 +230,8 @@ class SolanaKit(
 
     companion object {
 
-        val fee = BigDecimal(0.000005)
+        val fee = BigDecimal(0.000155)
+
         // Solana network will not store a SOL account with less than ~0.001 SOL.
         // Which means you can't have a SOL account with 0 SOL stored on the network.
         val accountRentAmount = BigDecimal(0.001)

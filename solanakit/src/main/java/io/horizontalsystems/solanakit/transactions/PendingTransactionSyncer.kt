@@ -1,10 +1,17 @@
 package io.horizontalsystems.solanakit.transactions
 
 import com.solana.api.Api
+import com.solana.rxsolana.api.getBlockHeight
 import com.solana.rxsolana.api.getConfirmedTransaction
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Transaction
 import kotlinx.coroutines.rx2.await
+import kotlinx.coroutines.withTimeout
+import org.sol4k.RpcUrl
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.logging.Logger
 
 class PendingTransactionSyncer(
@@ -17,25 +24,74 @@ class PendingTransactionSyncer(
     suspend fun sync() {
         val updatedTransactions = mutableListOf<Transaction>()
 
-        storage.pendingTransactions().forEach { pendingTx ->
+        val pendingTransactions = storage.pendingTransactions()
+        val currentBlockHeight = rpcClient.getBlockHeight().await()
+
+        pendingTransactions.forEach { pendingTx ->
             try {
-                val confirmedTransaction = rpcClient.getConfirmedTransaction(pendingTx.hash).await()
+                val confirmedTransaction = withTimeout(2000) {
+                    rpcClient.getConfirmedTransaction(pendingTx.hash).await()
+                }
+
                 confirmedTransaction.meta?.let { meta ->
                     updatedTransactions.add(
                         pendingTx.copy(pending = false, error = meta.err?.toString())
                     )
                 }
+
             } catch (error: Throwable) {
+                if (currentBlockHeight <= pendingTx.lastValidBlockHeight) {
+                    sendTransaction(pendingTx.base64Encoded)
+
+                    updatedTransactions.add(
+                        pendingTx.copy(retryCount = pendingTx.retryCount + 1)
+                    )
+                } else {
+                    updatedTransactions.add(
+                        pendingTx.copy(pending = false, error = "BlockHash expired")
+                    )
+                }
+
                 logger.info("getConfirmedTx exception ${error.message ?: error.javaClass.simpleName}")
             }
         }
 
-        if (updatedTransactions.isNotEmpty()) {
-            storage.updateTransactions(updatedTransactions)
+        storage.updateTransactions(updatedTransactions)
+        transactionManager.notifyTransactionsUpdate(storage.getFullTransactions(updatedTransactions.map { it.hash }))
+    }
 
-            val updatedTxHashes = updatedTransactions.map { it.hash }
-            val fullTransactions = storage.getFullTransactions(updatedTxHashes)
-            transactionManager.handle(fullTransactions, listOf())
+    private fun sendTransaction(encodedTransaction: String) {
+        try {
+            val connection = URL(RpcUrl.MAINNNET.value).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.outputStream.use {
+
+                val body = "{" +
+                        "\"method\": \"sendTransaction\", " +
+                        "\"jsonrpc\": \"2.0\", " +
+                        "\"id\": ${System.currentTimeMillis()}, " +
+                        "\"params\": [" +
+                        "\"$encodedTransaction\", " +
+                        "{" +
+                        "\"encoding\": \"base64\"," +
+                        "\"skipPreflight\": false," +
+                        "\"preflightCommitment\": \"confirmed\"," +
+                        "\"maxRetries\": 0" +
+                        "}" +
+                        "]" +
+                        "}"
+
+                it.write(body.toByteArray())
+            }
+            val responseBody = connection.inputStream.use {
+                BufferedReader(InputStreamReader(it)).use { reader ->
+                    reader.readText()
+                }
+            }
+            connection.disconnect()
+        } catch (e: Throwable) {
         }
     }
 
