@@ -50,7 +50,7 @@ class SolanaFmService {
         val response = api.legacyTokenAccounts(address).await()
 
         return response.tokens.values.map { token ->
-            TokenAccount(token.ata, token.mint, token.balance, token.tokenData.decimals)
+            TokenAccount(token.ata, token.mint, token.balance.movePointRight(token.tokenData.decimals), token.tokenData.decimals)
         }
     }
 

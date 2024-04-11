@@ -17,6 +17,7 @@ import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
+import io.horizontalsystems.solanakit.models.BufferInfoJsonAdapterFactory
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
@@ -244,7 +245,11 @@ class SolanaKit(
             debug: Boolean = false
         ): SolanaKit {
             val httpClient = httpClient(debug)
-            val config = NetworkingRouterConfig(listOf(MetadataAccountRule()), listOf(MetadataAccountJsonAdapterFactory()))
+            val config = NetworkingRouterConfig(
+                listOf(MetadataAccountRule()),
+                listOf(MetadataAccountJsonAdapterFactory(), BufferInfoJsonAdapterFactory())
+            )
+
             val router = OkHttpNetworkingRouter(rpcSource.endpoint, httpClient, config)
             val connectionManager = ConnectionManager(application)
 
