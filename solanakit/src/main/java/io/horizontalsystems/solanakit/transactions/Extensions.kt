@@ -3,10 +3,13 @@ package io.horizontalsystems.solanakit.transactions
 import com.solana.actions.Action
 import com.solana.actions.findSPLTokenDestinationAddress
 import com.solana.actions.serializeAndSendWithFee
+import com.solana.api.Api
+import com.solana.api.getMultipleAccounts
 import com.solana.core.Account
 import com.solana.core.PublicKey
 import com.solana.core.Transaction
 import com.solana.core.TransactionInstruction
+import com.solana.models.buffer.BufferInfo
 import com.solana.programs.AssociatedTokenProgram
 import com.solana.programs.SystemProgram
 import com.solana.programs.TokenProgram
@@ -15,6 +18,16 @@ import com.solana.vendor.ResultError
 import com.solana.vendor.flatMap
 import io.reactivex.Single
 import java.util.Base64
+
+fun <T> Api.getMultipleAccounts(
+    accounts: List<PublicKey>,
+    decodeTo: Class<T>
+): Single<List<BufferInfo<T>?>> = Single.create { emitter ->
+    getMultipleAccounts(accounts, decodeTo) { result ->
+        result.onSuccess { emitter.onSuccess(it) }
+        result.onFailure { emitter.onError(it) }
+    }
+}
 
 fun Action.sendSOL(
     account: Account,

@@ -1,10 +1,11 @@
 package io.horizontalsystems.solanakit.core
 
 import com.solana.api.Api
-import com.solana.api.getBalance
 import com.solana.core.PublicKey
+import com.solana.rxsolana.api.getBalance
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
+import kotlinx.coroutines.rx2.await
 
 interface IBalanceListener {
     fun onUpdateBalanceSyncState(value: SolanaKit.SyncState)
@@ -16,7 +17,6 @@ class BalanceManager(
     private val rpcClient: Api,
     private val storage: MainStorage
 ) {
-
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
         private set(value) {
             if (value != field) {
@@ -35,19 +35,16 @@ class BalanceManager(
         syncState = SolanaKit.SyncState.NotSynced(error ?: SolanaKit.SyncError.NotStarted())
     }
 
-    fun sync() {
+    suspend fun sync() {
         if (syncState is SolanaKit.SyncState.Syncing) return
 
         syncState = SolanaKit.SyncState.Syncing()
 
-        rpcClient.getBalance(publicKey) { result ->
-            result.onSuccess { balance ->
-                handleBalance(balance)
-            }
-
-            result.onFailure {
-                syncState = SolanaKit.SyncState.NotSynced(it)
-            }
+        try {
+            val balance = rpcClient.getBalance(publicKey).await()
+            handleBalance(balance)
+        } catch (error: Throwable) {
+            syncState = SolanaKit.SyncState.NotSynced(error)
         }
     }
 

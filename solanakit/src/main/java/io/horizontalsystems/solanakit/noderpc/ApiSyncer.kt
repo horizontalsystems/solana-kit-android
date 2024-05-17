@@ -1,12 +1,17 @@
 package io.horizontalsystems.solanakit.noderpc
 
 import com.solana.api.Api
-import com.solana.api.getBlockHeight
+import com.solana.rxsolana.api.getBlockHeight
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.network.ConnectionManager
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx2.await
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 
@@ -69,15 +74,12 @@ class ApiSyncer(
         stopTimer()
     }
 
-    private fun sync() {
-        api.getBlockHeight {
-            it.onSuccess { blockHeight ->
-                handleBlockHeight(blockHeight)
-            }
-
-            it.onFailure { exception ->
-                state = SyncerState.NotReady(exception)
-            }
+    private suspend fun sync() {
+        try {
+            val blockHeight = api.getBlockHeight().await()
+            handleBlockHeight(blockHeight)
+        } catch (error: Throwable) {
+            state = SyncerState.NotReady(error)
         }
     }
 
@@ -109,7 +111,9 @@ class ApiSyncer(
                     emit(Unit)
                     delay(syncInterval.toDuration(DurationUnit.SECONDS))
                 }
-            }.collect { sync() }
+            }.collect {
+                sync()
+            }
         }
     }
 

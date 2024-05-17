@@ -25,7 +25,11 @@ class PendingTransactionSyncer(
         val updatedTransactions = mutableListOf<Transaction>()
 
         val pendingTransactions = storage.pendingTransactions()
-        val currentBlockHeight = rpcClient.getBlockHeight().await()
+        val currentBlockHeight = try {
+            rpcClient.getBlockHeight().await()
+        } catch (error: Throwable) {
+            return
+        }
 
         pendingTransactions.forEach { pendingTx ->
             try {

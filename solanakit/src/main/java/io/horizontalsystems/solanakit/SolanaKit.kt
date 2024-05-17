@@ -2,6 +2,7 @@ package io.horizontalsystems.solanakit
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountJsonAdapterFactory
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccountRule
 import com.solana.actions.Action
@@ -38,7 +39,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.math.BigDecimal
@@ -294,18 +294,14 @@ class SolanaKit(
         }
 
         private fun httpClient(debug: Boolean): OkHttpClient {
-            val headersInterceptor = Interceptor { chain ->
-                val requestBuilder = chain.request().newBuilder()
-                chain.proceed(requestBuilder.build())
-            }
-
             val client = OkHttpClient.Builder()
-            client.addInterceptor(headersInterceptor)
 
             if (debug) {
-                val logging = HttpLoggingInterceptor()
-                logging.level = HttpLoggingInterceptor.Level.BODY
-                client.addInterceptor(logging)
+                val loggingInterceptor = HttpLoggingInterceptor { message ->
+                    Log.e("solana-kit", message)
+                }.setLevel(HttpLoggingInterceptor.Level.BODY)
+
+                client.addInterceptor(loggingInterceptor)
             }
 
             return client.build()
