@@ -2,7 +2,6 @@ package io.horizontalsystems.solanakit.core
 
 import android.util.Log
 import com.solana.api.Api
-import com.solana.api.getMultipleAccounts
 import com.solana.core.PublicKey
 import com.solana.models.buffer.AccountInfo
 import com.solana.models.buffer.BufferInfo
@@ -13,11 +12,13 @@ import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.MintAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.transactions.SolanaFmService
+import io.horizontalsystems.solanakit.transactions.getMultipleAccounts
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.rx2.await
 import java.math.BigDecimal
 
 interface ITokenAccountListener {
@@ -79,7 +80,7 @@ class TokenAccountManager(
         if (initialSync) {
             try {
                 fetchTokenAccounts(walletAddress)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 initialSync = false
                 Log.e("TokenAccountManager", "fetchTokenAccounts error: ", e)
             }
@@ -89,15 +90,11 @@ class TokenAccountManager(
         if (tokenAccounts.isEmpty()) return
 
         val publicKeys = tokenAccounts.map { PublicKey.valueOf(it.address) }
-
-        rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java) { result ->
-            result.onSuccess { result ->
-                handleBalance(tokenAccounts, result, initialSync)
-            }
-
-            result.onFailure {
-                syncState = SolanaKit.SyncState.NotSynced(it)
-            }
+        try {
+            val result = rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java).await()
+            handleBalance(tokenAccounts, result, initialSync)
+        } catch (error: Throwable) {
+            syncState = SolanaKit.SyncState.NotSynced(error)
         }
 
         if (initialSync) {

@@ -17,7 +17,7 @@ fun Api.getSignaturesForAddress(
     params.add(account.toString())
     params.add( ConfirmedSignFAddr2(limit = limit?.toLong(), before = before, until = until) )
 
-    router.request<List<SignatureInfo>>(
+    router.request(
         "getSignaturesForAddress", params,
         Types.newParameterizedType(List::class.java, SignatureInfo::class.java)
     ) { result ->
