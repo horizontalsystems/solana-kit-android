@@ -2,7 +2,9 @@ package io.horizontalsystems.solanakit.transactions
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import io.horizontalsystems.solanakit.models.TokenAccount
+import io.horizontalsystems.solanakit.models.TokenInfo
 import io.reactivex.Single
 import kotlinx.coroutines.rx2.await
 import okhttp3.OkHttpClient
@@ -54,12 +56,39 @@ class SolanaFmService {
         }
     }
 
+    suspend fun tokenInfo(mintAddress: String): TokenInfo {
+        val response = api.tokenInfo(mintAddress).await()
+
+        return TokenInfo(
+            name = response.tokenDetails.name,
+            symbol = response.tokenDetails.symbol,
+            decimals = response.decimals
+        )
+    }
+
     private interface SolanaFmApi {
         @GET("addresses/{address}/tokens?tokenType=Legacy")
         fun legacyTokenAccounts(
             @Path("address") address: String
         ): Single<TokenAccountsResponse>
+
+        @GET("tokens/{mintAddress}")
+        fun tokenInfo(
+            @Path("mintAddress") mintAddress: String
+        ): Single<TokenInfoResponse>
     }
+
+    data class TokenInfoResponse(
+        val mint: String,
+        val decimals: Int,
+        @SerializedName("tokenList")
+        val tokenDetails: TokenInfoDetails
+    )
+
+    data class TokenInfoDetails(
+        val name: String,
+        val symbol: String
+    )
 
     data class TokenAccountsResponse(
         val pubkey: String,
