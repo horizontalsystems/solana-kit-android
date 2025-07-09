@@ -15,6 +15,7 @@ import io.horizontalsystems.solanakit.core.ISyncListener
 import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
 import io.horizontalsystems.solanakit.core.SyncManager
 import io.horizontalsystems.solanakit.core.TokenAccountManager
+import io.horizontalsystems.solanakit.core.hexToByteArray
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
@@ -22,6 +23,7 @@ import io.horizontalsystems.solanakit.models.BufferInfoJsonAdapterFactory
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.RpcSource
+import io.horizontalsystems.solanakit.models.Transaction
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
@@ -41,7 +43,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.sol4k.Base58
+import org.sol4k.Connection
+import org.sol4k.RpcUrl
+import org.sol4k.VersionedTransaction
+import org.sol4k.api.Commitment
 import java.math.BigDecimal
+import java.time.Instant
+import java.util.Base64
 import java.util.Objects
 
 class SolanaKit(
@@ -190,6 +199,42 @@ class SolanaKit(
     fun nonFungibleTokenAccounts(): List<FullTokenAccount> =
         tokenAccountManager.tokenAccounts().filter { it.mintAccount.isNft }
 
+    fun estimateFee(hexEncoded: ByteArray): BigDecimal {
+        val base64Encoded = Base64.getEncoder().encodeToString(hexEncoded)
+        val versionedTx = VersionedTransaction.from(base64Encoded)
+        return versionedTx.calculateFee(baseFeeLamports)
+    }
+
+    fun sendRawTransaction(hexEncoded: ByteArray, signer: Signer): FullTransaction {
+        val base64Encoded = Base64.getEncoder().encodeToString(hexEncoded)
+        val versionedTx = VersionedTransaction.from(base64Encoded)
+        val signature = Base58.encode(signer.account.sign(versionedTx.message.serialize()))
+        versionedTx.addSignature(signature)
+        val base64WithSignature = Base64.getEncoder().encodeToString(versionedTx.serialize())
+
+        val connection = Connection(RpcUrl.MAINNNET)
+        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+
+        val transactionHash = connection.sendTransaction(versionedTx)
+
+        val fullTransaction = FullTransaction(
+            transaction = Transaction(
+                hash = transactionHash,
+                timestamp = Instant.now().epochSecond,
+                fee = versionedTx.calculateFee(baseFeeLamports),
+                from = address.publicKey.toBase58(),
+                to = null,
+                amount = null,
+                pending = true,
+                lastValidBlockHeight = blockHash.lastValidBlockHeight,
+                base64Encoded = base64WithSignature
+            ),
+            listOf()
+        )
+
+        return fullTransaction
+    }
+
     sealed class SyncState {
         class Synced : SyncState()
         class NotSynced(val error: Throwable) : SyncState()
@@ -230,6 +275,7 @@ class SolanaKit(
 
     companion object {
 
+        val baseFeeLamports = 5000
         val fee = BigDecimal(0.000155)
 
         // Solana network will not store a SOL account with less than ~0.001 SOL.

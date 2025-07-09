@@ -87,7 +87,10 @@ class TokenAccountManager(
         }
 
         val tokenAccounts = tokenAccounts ?: storage.getTokenAccounts()
-        if (tokenAccounts.isEmpty()) return
+        if (tokenAccounts.isEmpty()) {
+            syncState = SolanaKit.SyncState.Synced()
+            return
+        }
 
         val publicKeys = tokenAccounts.map { PublicKey.valueOf(it.address) }
         try {
