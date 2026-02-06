@@ -34,6 +34,7 @@ class ApiSyncer(
 
     private var scope: CoroutineScope? = null
     private var isStarted = false
+    private var isPaused = false
     private var timerJob: Job? = null
 
     init {
@@ -67,11 +68,25 @@ class ApiSyncer(
 
     fun stop() {
         isStarted = false
+        isPaused = false
 
         connectionManager.stop()
         state = SyncerState.NotReady(SolanaKit.SyncError.NotStarted())
         scope = null
         stopTimer()
+    }
+
+    fun pause() {
+        isPaused = true
+        stopTimer()
+    }
+
+    fun resume() {
+        isPaused = false
+
+        if (isStarted && connectionManager.isConnected) {
+            startTimer()
+        }
     }
 
     private suspend fun sync() {
@@ -97,7 +112,9 @@ class ApiSyncer(
 
         if (connectionManager.isConnected) {
             state = SyncerState.Ready
-            startTimer()
+            if (!isPaused) {
+                startTimer()
+            }
         } else {
             state = SyncerState.NotReady(SolanaKit.SyncError.NoNetworkConnection())
             stopTimer()

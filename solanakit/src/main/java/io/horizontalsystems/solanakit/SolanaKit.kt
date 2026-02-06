@@ -15,7 +15,6 @@ import io.horizontalsystems.solanakit.core.ISyncListener
 import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
 import io.horizontalsystems.solanakit.core.SyncManager
 import io.horizontalsystems.solanakit.core.TokenAccountManager
-import io.horizontalsystems.solanakit.core.hexToByteArray
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
@@ -122,6 +121,14 @@ class SolanaKit(
     fun stop() {
         syncManager.stop()
         scope?.cancel()
+    }
+
+    fun pause() {
+        syncManager.pause()
+    }
+
+    fun resume() {
+        syncManager.resume()
     }
 
     fun refresh() {
