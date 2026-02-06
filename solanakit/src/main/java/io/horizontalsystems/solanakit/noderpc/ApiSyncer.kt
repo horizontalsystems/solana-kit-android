@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx2.await
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 
@@ -93,6 +94,8 @@ class ApiSyncer(
         try {
             val blockHeight = api.getBlockHeight().await()
             handleBlockHeight(blockHeight)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
             state = SyncerState.NotReady(error)
         }
