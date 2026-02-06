@@ -81,6 +81,14 @@ class SyncManager(
         tokenAccountSyncer.stop()
     }
 
+    fun pause() {
+        apiSyncer.pause()
+    }
+
+    fun resume() {
+        apiSyncer.resume()
+    }
+
     override fun didUpdateApiState(state: SyncerState) {
         when (state) {
             SyncerState.Ready -> Unit
