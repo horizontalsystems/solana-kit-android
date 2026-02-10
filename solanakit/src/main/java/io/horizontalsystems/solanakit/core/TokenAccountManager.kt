@@ -1,6 +1,5 @@
 package io.horizontalsystems.solanakit.core
 
-import android.util.Log
 import com.solana.api.Api
 import com.solana.core.PublicKey
 import com.solana.models.buffer.AccountInfo
@@ -11,7 +10,6 @@ import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.MintAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
-import io.horizontalsystems.solanakit.transactions.SolanaFmService
 import io.horizontalsystems.solanakit.transactions.getMultipleAccounts
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +27,7 @@ class TokenAccountManager(
     private val walletAddress: String,
     private val rpcClient: Api,
     private val storage: TransactionStorage,
-    private val mainStorage: MainStorage,
-    private val solanaFmService: SolanaFmService
+    private val mainStorage: MainStorage
 ) {
 
     var syncState: SolanaKit.SyncState = SolanaKit.SyncState.NotSynced(SolanaKit.SyncError.NotStarted())
@@ -64,27 +61,10 @@ class TokenAccountManager(
         syncState = SolanaKit.SyncState.NotSynced(error ?: SolanaKit.SyncError.NotStarted())
     }
 
-    @Throws(Exception::class)
-    private suspend fun fetchTokenAccounts(walletAddress: String) {
-        val tokenAccounts = solanaFmService.tokenAccounts(walletAddress)
-        val mintAccounts = tokenAccounts.map { MintAccount(it.mintAddress, it.decimals) }
-
-        storage.saveTokenAccounts(tokenAccounts)
-        storage.saveMintAccounts(mintAccounts)
-    }
-
     suspend fun sync(tokenAccounts: List<TokenAccount>? = null) {
         syncState = SolanaKit.SyncState.Syncing()
 
-        var initialSync = mainStorage.isInitialSync()
-        if (initialSync) {
-            try {
-                fetchTokenAccounts(walletAddress)
-            } catch (e: Throwable) {
-                initialSync = false
-                Log.e("TokenAccountManager", "fetchTokenAccounts error: ", e)
-            }
-        }
+        val initialSync = mainStorage.isInitialSync()
 
         val tokenAccounts = tokenAccounts ?: storage.getTokenAccounts()
         if (tokenAccounts.isEmpty()) {

@@ -41,7 +41,7 @@ Pure Kotlin Solana SDK for Android. Syncs Solana wallet data (SOL balance, SPL t
 - **TransactionManager** — Transaction creation (SOL and SPL transfers), filtering, and reactive emission.
 - **TransactionSyncer** — Syncs transaction history from chain.
 - **PendingTransactionSyncer** — Monitors pending transactions for confirmation.
-- **SolscanClient** — REST client for Solscan API (transaction history).
+- **getTransaction.kt** — RPC endpoint extension for fetching full transaction details via Alchemy.
 - **SolanaFmService** — REST client for SolanaFM API (token account metadata).
 - **ComputeBudgetProgram** — Priority fee instruction generation.
 

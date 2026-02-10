@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.sample.App
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -17,6 +18,18 @@ class TransactionsViewModel : ViewModel() {
     val dateFormat = SimpleDateFormat("dd/M/yyyy hh:mm:ss")
 
     init {
+        loadAllTransactions()
+
+        viewModelScope.launch {
+            App.instance.solanaKit.transactionsSyncStateFlow.collect { syncState ->
+                if (syncState is SolanaKit.SyncState.Synced) {
+                    loadAllTransactions()
+                }
+            }
+        }
+    }
+
+    private fun loadAllTransactions() {
         viewModelScope.launch {
             val txs = App.instance.solanaKit.getAllTransactions().map {
                 """
@@ -27,7 +40,6 @@ class TransactionsViewModel : ViewModel() {
 
             _transactions.postValue(txs)
         }
-
     }
 
     fun getAllTransactions(incoming: Boolean?) {
