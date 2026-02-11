@@ -73,7 +73,7 @@ class TransactionStorage(
                                 tx.timestamp < ${fromTransaction.timestamp} OR
                                 (
                                     tx.timestamp = ${fromTransaction.timestamp} AND
-                                    HEX(tx.hash) < "${fromTransaction.hash}"
+                                    tx.hash < '${fromTransaction.hash}'
                                 )
                            )
                            """
@@ -82,7 +82,7 @@ class TransactionStorage(
         }
 
         val whereClause = if (whereConditions.isNotEmpty()) "WHERE ${whereConditions.joinToString(" AND ")}" else ""
-        val orderClause = "ORDER BY tx.timestamp DESC, HEX(tx.hash) DESC"
+        val orderClause = "ORDER BY tx.timestamp DESC, tx.hash DESC"
         val limitClause = limit?.let { "LIMIT $limit" } ?: ""
 
         val sqlQuery = """
@@ -105,7 +105,7 @@ class TransactionStorage(
                       SELECT tx.*
                       FROM `Transaction` AS tx
                       LEFT JOIN TokenTransfer AS tt ON tx.hash = tt.transactionHash
-                      WHERE tx.hash IN (${hashes.joinToString(", ", "'", "'")})
+                      WHERE tx.hash IN (${hashes.joinToString(", ") { "'$it'" }})
                       """
 
         return transactionsDao.getTransactions(SimpleSQLiteQuery(sqlQuery)).map { it.fullTransaction }

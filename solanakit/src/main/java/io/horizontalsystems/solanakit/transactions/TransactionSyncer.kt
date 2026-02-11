@@ -268,7 +268,7 @@ class TransactionSyncer(
         val transaction = Transaction(
             hash = signature,
             timestamp = blockTime,
-            fee = BigDecimal(fee),
+            fee = BigDecimal(fee).movePointLeft(9),
             from = solFrom,
             to = solTo,
             amount = solAmount,

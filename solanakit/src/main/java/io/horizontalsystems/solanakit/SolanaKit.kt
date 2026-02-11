@@ -14,17 +14,20 @@ import io.horizontalsystems.solanakit.core.ISyncListener
 import io.horizontalsystems.solanakit.core.SolanaDatabaseManager
 import io.horizontalsystems.solanakit.core.SyncManager
 import io.horizontalsystems.solanakit.core.TokenAccountManager
+import io.horizontalsystems.solanakit.core.TokenProvider
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
 import io.horizontalsystems.solanakit.models.Address
 import io.horizontalsystems.solanakit.models.BufferInfoJsonAdapterFactory
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.FullTransaction
+import io.horizontalsystems.solanakit.models.TokenInfo
 import io.horizontalsystems.solanakit.models.RpcSource
 import io.horizontalsystems.solanakit.models.Transaction
 import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
+import io.horizontalsystems.solanakit.transactions.JupiterApiService
 import io.horizontalsystems.solanakit.transactions.PendingTransactionSyncer
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
@@ -330,6 +333,7 @@ class SolanaKit(
             )
 
             val syncManager = SyncManager(apiSyncer, balanceManager, tokenAccountManager, transactionSyncer, transactionManager)
+
 
             val kit = SolanaKit(apiSyncer, balanceManager, tokenAccountManager, transactionManager, syncManager, rpcSource, address)
             syncManager.listener = kit
