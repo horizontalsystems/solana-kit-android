@@ -24,7 +24,6 @@ class App : Application() {
             addressString = address,
             rpcSource = Configuration.rpcSource,
             walletId = Configuration.walletId,
-            solscanApiKey = Configuration.solscanApiKey,
             debug = true
         )
 
