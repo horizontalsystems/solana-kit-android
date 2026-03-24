@@ -1,5 +1,6 @@
 package io.horizontalsystems.solanakit.transactions
 
+import android.util.Log
 import com.metaplex.lib.programs.token_metadata.TokenMetadataProgram
 import com.metaplex.lib.programs.token_metadata.accounts.MetadataAccount
 import com.metaplex.lib.programs.token_metadata.accounts.MetaplexTokenStandard.FungibleAsset
@@ -32,6 +33,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONObject
 import java.math.BigDecimal
 import java.net.URL
 import kotlin.coroutines.resume
@@ -154,10 +156,46 @@ class TransactionSyncer(
 
         val response = httpClient.newCall(request).execute()
         response.use { resp ->
-            if (!resp.isSuccessful) return@withContext emptyMap()
+            if (!resp.isSuccessful) {
+                return@withContext executeIndividualRequests(signatures, rpcUrl)
+            }
             val body = resp.body?.string() ?: return@withContext emptyMap()
             parseBatchResponse(signatures, body)
         }
+    }
+
+    private suspend fun executeIndividualRequests(
+        signatures: List<String>,
+        rpcUrl: URL
+    ): Map<String, TransactionResponse> = withContext(Dispatchers.IO) {
+        val results = mutableMapOf<String, TransactionResponse>()
+        val adapter = moshi.adapter(TransactionResponse::class.java)
+
+        for (signature in signatures) {
+            try {
+                val body = """{"jsonrpc":"2.0","id":0,"method":"getTransaction","params":["$signature",{"encoding":"jsonParsed","maxSupportedTransactionVersion":0}]}"""
+                val request = Request.Builder()
+                    .url(rpcUrl)
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val response = httpClient.newCall(request).execute()
+                response.use { resp ->
+                    if (!resp.isSuccessful) {
+                        return@use
+                    }
+                    val responseBody = resp.body?.string() ?: return@use
+                    val json = JSONObject(responseBody)
+                    if (json.isNull("result")) return@use
+                    val txResponse = adapter.fromJson(json.getJSONObject("result").toString()) ?: return@use
+                    results[signature] = txResponse
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to fetch transaction $signature", e)
+            }
+        }
+
+        results
     }
 
     private fun parseBatchResponse(
@@ -179,6 +217,7 @@ class TransactionSyncer(
                 val txResponse = adapter.fromJson(resultObj.toString()) ?: continue
                 results[signatures[id]] = txResponse
             } catch (e: Throwable) {
+                Log.e(TAG, "Failed to parse batch response item $i", e)
                 continue
             }
         }
@@ -403,6 +442,7 @@ class TransactionSyncer(
     }
 
     companion object {
+        private const val TAG = "TransactionSyncer"
         val tokenProgramId = TokenProgram.PROGRAM_ID.toBase58()
         val tokenMetadataProgramId = TokenMetadataProgram.publicKey.toBase58()
         const val rpcSignaturesCount = 1000

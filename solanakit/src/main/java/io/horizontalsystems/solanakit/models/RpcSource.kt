@@ -16,4 +16,15 @@ sealed class RpcSource(var name: String, var endpoint: RPCEndpoint, val syncInte
         ),
         30
     )
+
+    class Helius(apiKey: String) : RpcSource(
+        "Helius",
+        RPCEndpoint.custom(
+            URL("https://mainnet.helius-rpc.com/?api-key=$apiKey"),
+            URL("https://mainnet.helius-rpc.com/?api-key=$apiKey"),
+            Network.mainnetBeta
+        ),
+        30
+    )
+
 }
