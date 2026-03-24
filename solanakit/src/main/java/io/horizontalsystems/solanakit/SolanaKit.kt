@@ -297,7 +297,7 @@ class SolanaKit(
             walletId: String,
             debug: Boolean = false
         ): SolanaKit {
-            val httpClient = httpClient(debug)
+            val httpClient = httpClient(debug, listOfNotNull(rpcSource.createInterceptor()))
             val config = NetworkingRouterConfig(
                 listOf(MetadataAccountRule()),
                 listOf(MetadataAccountJsonAdapterFactory(), BufferInfoJsonAdapterFactory())
@@ -345,8 +345,10 @@ class SolanaKit(
             SolanaDatabaseManager.clear(context, walletId)
         }
 
-        private fun httpClient(debug: Boolean): OkHttpClient {
+        private fun httpClient(debug: Boolean, extraInterceptors: List<okhttp3.Interceptor> = emptyList()): OkHttpClient {
             val client = OkHttpClient.Builder()
+
+            extraInterceptors.forEach { client.addInterceptor(it) }
 
             if (debug) {
                 val loggingInterceptor = HttpLoggingInterceptor { message ->
