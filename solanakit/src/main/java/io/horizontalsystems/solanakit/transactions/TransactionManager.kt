@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.rx2.await
 import org.sol4k.Connection
-import org.sol4k.RpcUrl
 import org.sol4k.api.Commitment
 import java.math.BigDecimal
 import java.time.Instant
@@ -29,7 +28,8 @@ class TransactionManager(
     private val address: Address,
     private val storage: TransactionStorage,
     private val rpcAction: Action,
-    private val tokenAccountManager: TokenAccountManager
+    private val tokenAccountManager: TokenAccountManager,
+    private val rpcEndpointUrl: String
 ) {
 
     private val addressString = address.publicKey.toBase58()
@@ -129,7 +129,7 @@ class TransactionManager(
         }
 
     suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
-        val connection = Connection(RpcUrl.MAINNNET)
+        val connection = Connection(rpcEndpointUrl)
         val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
         val (transactionHash, base64Encoded) = rpcAction.sendSOL(
             account = signerAccount,
@@ -174,7 +174,7 @@ class TransactionManager(
         val tokenAccount = fullTokenAccount.tokenAccount
         val mintAccount = fullTokenAccount.mintAccount
 
-        val connection = Connection(RpcUrl.MAINNNET)
+        val connection = Connection(rpcEndpointUrl)
         val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
 
         val (transactionHash, base64Trx) = rpcAction.sendSPLTokens(

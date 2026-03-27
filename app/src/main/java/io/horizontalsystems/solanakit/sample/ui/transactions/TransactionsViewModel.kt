@@ -70,12 +70,14 @@ class TransactionsViewModel : ViewModel() {
 
     fun getSplTransactions(incoming: Boolean?) {
         viewModelScope.launch {
-            val txs = App.instance.solanaKit.getSplTransactions("AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB", incoming).map {
-                """
+            val txs = App.instance.solanaKit.getAllTransactions(incoming)
+                .filter { it.tokenTransfers.isNotEmpty() }
+                .map {
+                    """
                     Hash: ${it.transaction.hash}
                     Date: ${dateFormat.format(Date(it.transaction.timestamp * 1000))}
                 """.trimIndent()
-            }
+                }
 
             _transactions.postValue(txs)
         }

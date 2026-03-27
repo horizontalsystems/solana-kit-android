@@ -86,7 +86,7 @@ class TransactionStorage(
         val limitClause = limit?.let { "LIMIT $limit" } ?: ""
 
         val sqlQuery = """
-                      SELECT tx.*
+                      SELECT DISTINCT tx.*
                       FROM `Transaction` AS tx
                       ${if (joinTokenTransfers) "LEFT JOIN TokenTransfer AS tt ON tx.hash = tt.transactionHash" else ""}
                       $whereClause
