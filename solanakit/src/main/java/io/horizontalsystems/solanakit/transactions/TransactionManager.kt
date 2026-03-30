@@ -13,12 +13,14 @@ import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.models.TokenTransfer
 import io.horizontalsystems.solanakit.models.Transaction
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.rx2.await
+import kotlinx.coroutines.withContext
 import org.sol4k.Connection
 import org.sol4k.api.Commitment
 import java.math.BigDecimal
@@ -130,7 +132,7 @@ class TransactionManager(
 
     suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
         val connection = Connection(rpcEndpointUrl)
-        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        val blockHash = withContext(Dispatchers.IO) { connection.getLatestBlockhashExtended(Commitment.FINALIZED) }
         val (transactionHash, base64Encoded) = rpcAction.sendSOL(
             account = signerAccount,
             destination = toAddress.publicKey,
@@ -175,7 +177,7 @@ class TransactionManager(
         val mintAccount = fullTokenAccount.mintAccount
 
         val connection = Connection(rpcEndpointUrl)
-        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        val blockHash = withContext(Dispatchers.IO) { connection.getLatestBlockhashExtended(Commitment.FINALIZED) }
 
         val (transactionHash, base64Trx) = rpcAction.sendSPLTokens(
             mintAddress = mintAddress.publicKey,

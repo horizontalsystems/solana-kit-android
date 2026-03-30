@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.horizontalsystems.solanakit.models.Address
 import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.sample.App
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 
@@ -29,7 +30,7 @@ class SendViewModel : ViewModel() {
     fun sendSol(toAddress: String, amountStr: String) {
         val kit = App.instance.solanaKit
         val signer = App.instance.signer
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             isSending.postValue(true)
             try {
                 val lamports = BigDecimal(amountStr)
@@ -48,7 +49,7 @@ class SendViewModel : ViewModel() {
     fun sendSpl(mintAddress: String, toAddress: String, amountStr: String, decimals: Int) {
         val kit = App.instance.solanaKit
         val signer = App.instance.signer
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             isSending.postValue(true)
             try {
                 val rawAmount = BigDecimal(amountStr)
