@@ -13,15 +13,20 @@ import io.horizontalsystems.solanakit.models.FullTransaction
 import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.models.TokenTransfer
 import io.horizontalsystems.solanakit.models.Transaction
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.rx2.await
-import org.sol4k.Connection
-import org.sol4k.RpcUrl
-import org.sol4k.api.Commitment
+import kotlinx.coroutines.withContext
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -29,7 +34,9 @@ class TransactionManager(
     private val address: Address,
     private val storage: TransactionStorage,
     private val rpcAction: Action,
-    private val tokenAccountManager: TokenAccountManager
+    private val tokenAccountManager: TokenAccountManager,
+    private val rpcEndpointUrl: String,
+    private val httpClient: OkHttpClient
 ) {
 
     private val addressString = address.publicKey.toBase58()
@@ -128,15 +135,29 @@ class TransactionManager(
             fullTokenTransfer.tokenTransfer.incoming == incoming
         }
 
+    private suspend fun getLatestBlockhash(): Pair<String, Long> = withContext(Dispatchers.IO) {
+        val rpcRequest = RpcRequest(method = "getLatestBlockhash", params = listOf(mapOf("commitment" to "finalized")))
+        val requestBody = rpcRequestAdapter.toJson(rpcRequest).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(rpcEndpointUrl)
+            .post(requestBody)
+            .build()
+        val response = httpClient.newCall(request).execute()
+        response.use { resp ->
+            val parsed = blockhashResponseAdapter.fromJson(resp.body.string())
+            val value = parsed?.result?.value ?: throw Exception("Invalid getLatestBlockhash response")
+            Pair(value.blockhash, value.lastValidBlockHeight)
+        }
+    }
+
     suspend fun sendSol(toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
-        val connection = Connection(RpcUrl.MAINNNET)
-        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        val (blockhash, lastValidBlockHeight) = getLatestBlockhash()
         val (transactionHash, base64Encoded) = rpcAction.sendSOL(
             account = signerAccount,
             destination = toAddress.publicKey,
             amount = amount,
             instructions = priorityFeeInstructions(),
-            recentBlockHash = blockHash.blockhash
+            recentBlockHash = blockhash
         ).await()
 
         val fullTransaction = FullTransaction(
@@ -148,8 +169,8 @@ class TransactionManager(
                 to = toAddress.publicKey.toBase58(),
                 amount = amount.toBigDecimal(),
                 pending = true,
-                blockHash = blockHash.blockhash,
-                lastValidBlockHeight = blockHash.lastValidBlockHeight,
+                blockHash = blockhash,
+                lastValidBlockHeight = lastValidBlockHeight,
                 base64Encoded = base64Encoded
             ),
             listOf()
@@ -174,8 +195,7 @@ class TransactionManager(
         val tokenAccount = fullTokenAccount.tokenAccount
         val mintAccount = fullTokenAccount.mintAccount
 
-        val connection = Connection(RpcUrl.MAINNNET)
-        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        val (blockhash, lastValidBlockHeight) = getLatestBlockhash()
 
         val (transactionHash, base64Trx) = rpcAction.sendSPLTokens(
             mintAddress = mintAddress.publicKey,
@@ -185,7 +205,7 @@ class TransactionManager(
             account = signerAccount,
             allowUnfundedRecipient = true,
             instructions = priorityFeeInstructions(),
-            recentBlockHash = blockHash.blockhash
+            recentBlockHash = blockhash
         ).await()
 
         val fullTransaction = FullTransaction(
@@ -194,8 +214,8 @@ class TransactionManager(
                 timestamp = Instant.now().epochSecond,
                 fee = SolanaKit.fee,
                 pending = true,
-                blockHash = blockHash.blockhash,
-                lastValidBlockHeight = blockHash.lastValidBlockHeight,
+                blockHash = blockhash,
+                lastValidBlockHeight = lastValidBlockHeight,
                 base64Encoded = base64Trx
             ),
             listOf(
@@ -210,6 +230,24 @@ class TransactionManager(
         _transactionsFlow.tryEmit(listOf(fullTransaction))
 
         return fullTransaction
+    }
+
+    private data class RpcRequest(
+        val jsonrpc: String = "2.0",
+        val id: Int = 1,
+        val method: String,
+        val params: List<Any>
+    )
+
+    
+    private data class BlockhashResponse(val result: BlockhashResult?)
+    private data class BlockhashResult(val value: BlockhashValue?)
+    private data class BlockhashValue(val blockhash: String, val lastValidBlockHeight: Long)
+
+    companion object {
+        private val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+        private val rpcRequestAdapter = moshi.adapter(RpcRequest::class.java)
+        private val blockhashResponseAdapter = moshi.adapter(BlockhashResponse::class.java)
     }
 
 }
