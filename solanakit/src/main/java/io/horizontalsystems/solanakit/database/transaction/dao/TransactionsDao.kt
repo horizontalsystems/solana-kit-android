@@ -17,6 +17,14 @@ interface TransactionsDao {
     @Query("SELECT * FROM `Transaction` WHERE pending ORDER BY timestamp")
     fun pendingTransactions() : List<Transaction>
 
+    @Query("SELECT hash, programIds FROM `Transaction` WHERE hash IN (:hashes) AND programIds IS NOT NULL")
+    fun getProgramIds(hashes: List<String>): List<HashWithProgramIds>
+
+    data class HashWithProgramIds(
+        val hash: String,
+        val programIds: String
+    )
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTransactions(transactions: List<Transaction>)
 

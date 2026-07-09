@@ -28,7 +28,9 @@ import io.horizontalsystems.solanakit.network.ConnectionManager
 import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
 import io.horizontalsystems.solanakit.transactions.JupiterApiService
+import io.horizontalsystems.solanakit.transactions.KnownPrograms
 import io.horizontalsystems.solanakit.transactions.PendingTransactionSyncer
+import io.horizontalsystems.solanakit.transactions.RawTransactionParser
 import io.horizontalsystems.solanakit.transactions.TransactionManager
 import io.horizontalsystems.solanakit.transactions.TransactionSyncer
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +48,7 @@ import org.sol4k.Base58
 import org.sol4k.Connection
 import org.sol4k.RpcUrl
 import org.sol4k.VersionedTransaction
+import org.sol4k.api.Blockhash
 import org.sol4k.api.Commitment
 import java.math.BigDecimal
 import java.time.Instant
@@ -213,16 +216,37 @@ class SolanaKit(
     }
 
     fun sendRawTransaction(hexEncoded: ByteArray, signer: Signer): FullTransaction {
+        val parsed = RawTransactionParser.parse(hexEncoded)
         val base64Encoded = Base64.getEncoder().encodeToString(hexEncoded)
-        val versionedTx = VersionedTransaction.from(base64Encoded)
+        var versionedTx = VersionedTransaction.from(base64Encoded)
+
+        val connection = Connection(RpcUrl.MAINNNET)
+
+        // Refresh the recent blockhash just before signing. Externally-built transactions
+        // (e.g. server-assembled Jupiter swaps) routinely outlive their embedded blockhash
+        // (~60-90s) while the user reviews a confirmation screen — broadcasting then fails
+        // with "Blockhash not found". Replacing it is only safe while nobody else has signed
+        // (a co-signature covers the old bytes), so it is limited to single-signer
+        // transactions. The response is reused below for `lastValidBlockHeight`, which then
+        // describes the blockhash actually embedded in the broadcast transaction; on the
+        // co-signed path it is fetched separately, as before — an UPPER BOUND for the older
+        // embedded blockhash, so pending-expiry detection can lag but never fires early.
+        var refreshedBlockhash: Blockhash? = null
+        if (parsed.requiredSignatures <= 1) {
+            refreshedBlockhash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+            versionedTx = VersionedTransaction(versionedTx.message.withNewBlockhash(refreshedBlockhash.blockhash))
+        }
+
         val signature = Base58.encode(signer.account.sign(versionedTx.message.serialize()))
         versionedTx.addSignature(signature)
         val base64WithSignature = Base64.getEncoder().encodeToString(versionedTx.serialize())
 
-        val connection = Connection(RpcUrl.MAINNNET)
-        val blockHash = connection.getLatestBlockhashExtended(Commitment.FINALIZED)
-
         val transactionHash = connection.sendTransaction(versionedTx)
+
+        // Reused from the pre-signing refresh when the message was rewritten; fetched only now,
+        // post-broadcast, on the co-signed path — a transient RPC failure must not abort a send
+        // whose embedded blockhash is still valid.
+        val blockhashInfo = refreshedBlockhash ?: connection.getLatestBlockhashExtended(Commitment.FINALIZED)
 
         val fullTransaction = FullTransaction(
             transaction = Transaction(
@@ -233,11 +257,21 @@ class SolanaKit(
                 to = null,
                 amount = null,
                 pending = true,
-                lastValidBlockHeight = blockHash.lastValidBlockHeight,
-                base64Encoded = base64WithSignature
+                blockHash = refreshedBlockhash?.blockhash ?: parsed.recentBlockhash,
+                lastValidBlockHeight = blockhashInfo.lastValidBlockHeight,
+                base64Encoded = base64WithSignature,
+                // The program invoked by each compiled instruction (program ids are always
+                // static account keys), filtered to the recognized set — lets clients render
+                // e.g. a Jupiter interaction as a swap while it is still pending. Same
+                // instruction-based derivation as TransactionSyncer's.
+                programIds = KnownPrograms.recognized(parsed.invokedProgramIds)
             ),
             listOf()
         )
+
+        // Persist and emit (as sendSol/sendSpl do), so the pending record shows up in history
+        // immediately instead of only after the next sync discovers it on-chain.
+        transactionManager.registerPendingTransaction(fullTransaction)
 
         return fullTransaction
     }

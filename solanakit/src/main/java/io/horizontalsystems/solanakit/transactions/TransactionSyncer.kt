@@ -338,7 +338,15 @@ class TransactionSyncer(
             to = solTo,
             amount = solAmount,
             error = error,
-            pending = false
+            pending = false,
+            // Derive from the INVOKED program of each top-level instruction (jsonParsed carries
+            // `programId` per instruction) — never from accountKeys presence, which would also
+            // match transactions that merely reference a program (e.g. the wallet receiving the
+            // tail of someone else's Jupiter swap) and, with jsonParsed, lookup-table-loaded
+            // addresses. Matches the send-path derivation in SolanaKit.sendRawTransaction.
+            programIds = KnownPrograms.recognized(
+                response.transaction?.message?.instructions?.mapNotNull { it.programId } ?: emptyList()
+            )
         )
 
         return ParsedTransaction(

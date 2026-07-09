@@ -26,14 +26,38 @@ class TransactionStorage(
         transactionsDao.pendingTransactions()
 
     fun updateTransactions(transactions: List<Transaction>) =
-        transactionsDao.updateTransactions(transactions)
+        transactionsDao.updateTransactions(backfillProgramIds(transactions))
 
     fun addTransactions(transactions: List<FullTransaction>) {
-        transactionsDao.insertTransactions(transactions.map { it.transaction })
+        transactionsDao.insertTransactions(backfillProgramIds(transactions.map { it.transaction }))
 
         val fullTokenTransfers = transactions.map { it.tokenTransfers }.flatten()
         transactionsDao.insertTokenTransfers(fullTokenTransfers.map { it.tokenTransfer })
         mintAccountDao.insert(fullTokenTransfers.map { it.mintAccount }.toSet().toList())
+    }
+
+    // Both write paths perform full-row rewrites (REPLACE on insert, all-columns UPDATE on
+    // update), so a writer that doesn't carry `programIds` would silently null an existing tag
+    // and un-label a classified swap. The tag is immutable once known — a transaction's invoked
+    // programs never change — so backfill it from the stored rows whenever incoming ones lack
+    // it. One batched SELECT over the missing hashes (restricted to rows that HAVE a tag), not
+    // a per-row lookup: history syncs funnel the whole batch through a single write.
+    private fun backfillProgramIds(transactions: List<Transaction>): List<Transaction> {
+        val missingHashes = transactions.mapNotNull { if (it.programIds == null) it.hash else null }
+        if (missingHashes.isEmpty()) return transactions
+
+        val stored = missingHashes.chunked(500)
+            .flatMap { transactionsDao.getProgramIds(it) }
+            .associate { it.hash to it.programIds }
+        if (stored.isEmpty()) return transactions
+
+        return transactions.map { transaction ->
+            if (transaction.programIds == null) {
+                stored[transaction.hash]?.let { transaction.copy(programIds = it) } ?: transaction
+            } else {
+                transaction
+            }
+        }
     }
 
     suspend fun getTransactions(incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> {

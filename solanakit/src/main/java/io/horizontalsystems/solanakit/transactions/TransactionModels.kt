@@ -42,7 +42,16 @@ data class TransactionDetail(
 
 @JsonClass(generateAdapter = true)
 data class TransactionMessage(
-    val accountKeys: List<AccountKey>?
+    val accountKeys: List<AccountKey>?,
+    val instructions: List<InstructionInfo>?
+)
+
+// A top-level instruction in a transaction message (jsonParsed format). Both jsonParsed
+// shapes (`parsed` and `partiallyDecoded`) carry the invoked `programId` directly; the
+// remaining fields differ per shape and are not needed here, so only `programId` is decoded.
+@JsonClass(generateAdapter = true)
+data class InstructionInfo(
+    val programId: String?
 )
 
 @JsonClass(generateAdapter = true)

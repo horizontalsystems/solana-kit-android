@@ -85,16 +85,27 @@ class TransactionManager(
                     val existingTxHeader = existingTx.transaction
 
                     FullTransaction(
-                        transaction = Transaction(
-                            hash = syncedTxHeader.hash,
-                            timestamp = syncedTxHeader.timestamp,
+                        // Merge by COPYING the stored record: columns not named here (blockHash,
+                        // lastValidBlockHeight, base64Encoded, retryCount, and any future ones)
+                        // keep their stored values automatically, so a column can't be silently
+                        // reset to its default by an incomplete constructor call.
+                        transaction = existingTxHeader.copy(
+                            // Keep the stored timestamp when the confirmed record reports none
+                            // (blockTime can be null on a just-confirmed tx) — the pending row's
+                            // send-time value beats overwriting it with 0, which would jump the
+                            // row to 1970.
+                            timestamp = if (syncedTxHeader.timestamp != 0L) syncedTxHeader.timestamp else existingTxHeader.timestamp,
                             fee = syncedTxHeader.fee,
                             from = syncedTxHeader.from ?: existingTxHeader.from,
                             to = syncedTxHeader.to ?: existingTxHeader.to,
                             amount = syncedTxHeader.amount ?: existingTxHeader.amount,
                             error = syncedTxHeader.error,
                             pending = syncedTxHeader.pending,
-                            ),
+                            // Freshly derived tag wins (the stored one may predate the program
+                            // joining KnownPrograms); fall back to the stored value when the
+                            // sync derived none.
+                            programIds = syncedTxHeader.programIds ?: existingTxHeader.programIds,
+                        ),
                         tokenTransfers = syncedTx.tokenTransfers.ifEmpty {
                             for (tokenTransfer in existingTx.tokenTransfers) {
                                 existingMintAddresses.add(tokenTransfer.mintAccount.address)
@@ -117,6 +128,13 @@ class TransactionManager(
 
     fun notifyTransactionsUpdate(transactions: List<FullTransaction>) {
         _transactionsFlow.tryEmit(transactions)
+    }
+
+    // Persists and emits a just-broadcast transaction (same as the sendSol/sendSpl tail), so an
+    // externally-built raw send (e.g. a Jupiter swap) appears in history immediately as pending.
+    fun registerPendingTransaction(fullTransaction: FullTransaction) {
+        storage.addTransactions(listOf(fullTransaction))
+        _transactionsFlow.tryEmit(listOf(fullTransaction))
     }
 
     private fun hasSolTransfer(fullTransaction: FullTransaction, incoming: Boolean?): Boolean {

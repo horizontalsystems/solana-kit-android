@@ -18,5 +18,9 @@ data class Transaction(
     val blockHash: String = "",
     val lastValidBlockHeight: Long = 0,
     val base64Encoded: String = "",
-    val retryCount: Int = 0
+    val retryCount: Int = 0,
+    // Space-separated RECOGNIZED program ids this transaction invoked (see KnownPrograms), e.g.
+    // the Jupiter aggregator — lets clients classify swaps ("Swapped via Jupiter") instead of
+    // rendering an unknown multi-transfer transaction. Null when none were recognized.
+    val programIds: String? = null
 )
