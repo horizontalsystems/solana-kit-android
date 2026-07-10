@@ -14,8 +14,11 @@ object KnownPrograms {
     /** Jupiter aggregator v6. */
     const val jupiterV6 = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
 
+    /** LI.FI executor program (logs "LI.FI TX"); the entry point of a LI.FI Solana swap/bridge. */
+    const val lifi = "3i5JeuZuUxeKtVysUnwQNGerJP2bSMX9fTFfS4Nxe3Br"
+
     /** All recognized program ids. */
-    val all: Set<String> = setOf(jupiterV6)
+    val all: Set<String> = setOf(jupiterV6, lifi)
 
     /**
      * The recognized subset of [candidates], deduplicated (first occurrence wins, order
