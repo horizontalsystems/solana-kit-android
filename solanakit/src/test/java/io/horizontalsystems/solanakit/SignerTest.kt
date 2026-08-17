@@ -19,6 +19,14 @@ class SignerTest {
         TweetNaclFast.Signature(publicKey, ByteArray(0)).detached_verify(message, signature)
 
     @Test
+    fun sol4kKeypair_matchesAccountPublicKey() {
+        // The sol4k Keypair (built from the 32-byte BIP44 seed) and the com.solana account (built
+        // from the 64-byte secret key) must derive the SAME public key, otherwise Token-2022 sends
+        // would be signed by the wrong key.
+        assertEquals(Signer.address(seed), signer.sol4kKeypair.publicKey.toBase58())
+    }
+
+    @Test
     fun signMessage_producesVerifiableSignature() {
         val message = "Hello Solana".toByteArray()
 

@@ -7,10 +7,17 @@ import com.solana.vendor.bip32.wallet.DerivableType
 import com.solana.vendor.bip32.wallet.SolanaBip44
 import io.horizontalsystems.solanakit.models.SignedTransaction
 import org.sol4k.Base58
+import org.sol4k.Keypair
 import org.sol4k.VersionedTransaction
 import java.util.Base64
 
-class Signer(internal val account: Account) {
+class Signer(
+    internal val account: Account,
+    // sol4k keypair over the same key, used to sign sol4k-built transactions (e.g. the
+    // Token-2022 send path). Kept alongside `account` because the two libraries do not share a
+    // signing type.
+    internal val sol4kKeypair: Keypair,
+) {
 
     /**
      * Signs an arbitrary message with the account's ed25519 key. Used by WalletConnect's
@@ -41,7 +48,13 @@ class Signer(internal val account: Account) {
         fun getInstance(seed: ByteArray): Signer {
             val account = account(privateKey(seed))
 
-            return Signer(account)
+            // sol4k's Keypair.fromSecretKey expects the 32-byte ed25519 seed (it calls
+            // keyPair_fromSeed), i.e. the BIP44-derived private key — NOT the 64-byte secret
+            // key that `privateKey(seed)` returns. Both libraries derive the same public key.
+            val derivedPrivateKey = SolanaBip44().getPrivateKeyFromSeed(seed, DerivableType.BIP44CHANGE)
+            val sol4kKeypair = Keypair.fromSecretKey(derivedPrivateKey)
+
+            return Signer(account, sol4kKeypair)
         }
 
         fun address(seed: ByteArray): String {
