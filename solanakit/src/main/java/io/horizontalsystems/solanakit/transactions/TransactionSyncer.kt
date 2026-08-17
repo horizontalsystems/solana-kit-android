@@ -214,9 +214,6 @@ class TransactionSyncer(
                 if (item.isNull("result")) continue
 
                 val resultObj = item.getJSONObject("result")
-                // DEBUG: capture the raw on-chain transaction body (filter logcat by tag
-                // "SolanaTxDebug"). Remove once the Token-2022 parsing issue is resolved.
-                Log.d("SolanaTxDebug", "raw tx ${signatures[id]}: $resultObj")
                 val txResponse = adapter.fromJson(resultObj.toString()) ?: continue
                 results[signatures[id]] = txResponse
             } catch (e: Throwable) {
@@ -350,16 +347,6 @@ class TransactionSyncer(
             programIds = KnownPrograms.recognized(
                 response.transaction?.message?.instructions?.mapNotNull { it.programId } ?: emptyList()
             )
-        )
-
-        // DEBUG: how this transaction parsed (SOL leg + token legs). If an SPL send shows a
-        // non-null SOL amount AND a token transfer, the app converter classifies it as
-        // "Unknown" (two outgoing legs). Filter logcat by tag "SolanaTxDebug".
-        Log.d(
-            "SolanaTxDebug",
-            "parsed $signature | ourIndex=$ourIndex solFrom=$solFrom solTo=$solTo solAmount=$solAmount fee=$fee | " +
-                "tokenTransfers=${tokenTransfers.map { "mint=${it.tokenTransfer.mintAddress} incoming=${it.tokenTransfer.incoming} amount=${it.tokenTransfer.amount}" }} | " +
-                "postTokenBalances=${meta?.postTokenBalances} preTokenBalances=${meta?.preTokenBalances}"
         )
 
         return ParsedTransaction(

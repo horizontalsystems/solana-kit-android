@@ -150,7 +150,7 @@ class TransactionManager(
 
     private fun hasSplTransfer(mintAddress: String, tokenTransfers: List<FullTokenTransfer>, incoming: Boolean?): Boolean =
         tokenTransfers.any { fullTokenTransfer ->
-            if (fullTokenTransfer.mintAccount.address != mintAddress) return false
+            if (fullTokenTransfer.mintAccount.address != mintAddress) return@any false
             val incoming = incoming ?: return@any true
 
             fullTokenTransfer.tokenTransfer.incoming == incoming
