@@ -232,7 +232,7 @@ class TransactionManager(
             val result = withContext(Dispatchers.IO) {
                 token2022Sender.send(
                     mint = org.sol4k.PublicKey(mintAddressString),
-                    walletAddress = org.sol4k.PublicKey(addressString),
+                    walletAddress = signer.sol4kKeypair.publicKey,
                     recipient = org.sol4k.PublicKey(toAddress.publicKey.toBase58()),
                     amount = amount,
                     decimals = tokenAccount.decimals,
