@@ -201,7 +201,7 @@ class SolanaKit(
         transactionManager.sendSol(toAddress, amount, signer.account)
 
     suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction =
-        transactionManager.sendSpl(mintAddress, toAddress, amount, signer.account)
+        transactionManager.sendSpl(mintAddress, toAddress, amount, signer)
 
     fun fungibleTokenAccounts(): List<FullTokenAccount> =
         tokenAccountManager.tokenAccounts().filter { !it.mintAccount.isNft }

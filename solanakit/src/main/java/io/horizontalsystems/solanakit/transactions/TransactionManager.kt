@@ -4,6 +4,7 @@ import com.solana.actions.Action
 import com.solana.core.Account
 import com.solana.core.PublicKey
 import com.solana.core.TransactionInstruction
+import io.horizontalsystems.solanakit.Signer
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.core.TokenAccountManager
 import io.horizontalsystems.solanakit.database.transaction.TransactionStorage
@@ -23,6 +24,7 @@ import kotlinx.coroutines.rx2.await
 import kotlinx.coroutines.withContext
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import org.sol4k.Constants.TOKEN_2022_PROGRAM_ID
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,6 +42,7 @@ class TransactionManager(
 ) {
 
     private val addressString = address.publicKey.toBase58()
+    private val token2022Sender = Token2022Sender(rpcEndpointUrl)
     private val _transactionsFlow = MutableStateFlow<List<FullTransaction>>(listOf())
     val transactionsFlow: StateFlow<List<FullTransaction>> = _transactionsFlow
 
@@ -206,25 +209,59 @@ class TransactionManager(
         return listOf(computeUnitLimit, computeUnitPrice)
     }
 
-    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signerAccount: Account): FullTransaction {
+    suspend fun sendSpl(mintAddress: Address, toAddress: Address, amount: Long, signer: Signer): FullTransaction {
         val mintAddressString = mintAddress.publicKey.toBase58()
         val fullTokenAccount = tokenAccountManager.getFullTokenAccountByMintAddress(mintAddressString)
             ?: throw Exception("TokenAccount not found for $mintAddressString")
         val tokenAccount = fullTokenAccount.tokenAccount
         val mintAccount = fullTokenAccount.mintAccount
 
-        val (blockhash, lastValidBlockHeight) = getLatestBlockhash()
+        // A mint is Token-2022 when its account is owned by the Token-2022 program. The classic
+        // com.solana send path only handles classic SPL Token; Token-2022 goes through sol4k.
+        val isToken2022 = withContext(Dispatchers.IO) {
+            org.sol4k.Connection(rpcEndpointUrl)
+                .getAccountInfo(org.sol4k.PublicKey(mintAddressString))?.owner == TOKEN_2022_PROGRAM_ID
+        }
 
-        val (transactionHash, base64Trx) = rpcAction.sendSPLTokens(
-            mintAddress = mintAddress.publicKey,
-            fromPublicKey = PublicKey(tokenAccount.address),
-            destinationAddress = toAddress.publicKey,
-            amount = amount,
-            account = signerAccount,
-            allowUnfundedRecipient = true,
-            instructions = priorityFeeInstructions(),
-            recentBlockHash = blockhash
-        ).await()
+        val transactionHash: String
+        val base64Trx: String
+        val blockhash: String
+        val lastValidBlockHeight: Long
+
+        if (isToken2022) {
+            val result = withContext(Dispatchers.IO) {
+                token2022Sender.send(
+                    mint = org.sol4k.PublicKey(mintAddressString),
+                    walletAddress = org.sol4k.PublicKey(addressString),
+                    recipient = org.sol4k.PublicKey(toAddress.publicKey.toBase58()),
+                    amount = amount,
+                    decimals = tokenAccount.decimals,
+                    keypair = signer.sol4kKeypair,
+                )
+            }
+            transactionHash = result.transactionHash
+            base64Trx = result.base64Encoded
+            blockhash = result.blockhash
+            lastValidBlockHeight = result.lastValidBlockHeight
+        } else {
+            val (classicBlockhash, classicLastValidBlockHeight) = getLatestBlockhash()
+
+            val classicResult = rpcAction.sendSPLTokens(
+                mintAddress = mintAddress.publicKey,
+                fromPublicKey = PublicKey(tokenAccount.address),
+                destinationAddress = toAddress.publicKey,
+                amount = amount,
+                account = signer.account,
+                allowUnfundedRecipient = true,
+                instructions = priorityFeeInstructions(),
+                recentBlockHash = classicBlockhash
+            ).await()
+
+            transactionHash = classicResult.first
+            base64Trx = classicResult.second
+            blockhash = classicBlockhash
+            lastValidBlockHeight = classicLastValidBlockHeight
+        }
 
         val fullTransaction = FullTransaction(
             Transaction(
