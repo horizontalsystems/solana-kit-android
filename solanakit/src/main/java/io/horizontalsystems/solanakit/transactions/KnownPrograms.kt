@@ -17,8 +17,15 @@ object KnownPrograms {
     /** LI.FI executor program (logs "LI.FI TX"); the entry point of a LI.FI Solana swap/bridge. */
     const val lifi = "3i5JeuZuUxeKtVysUnwQNGerJP2bSMX9fTFfS4Nxe3Br"
 
+    /**
+     * DFlow aggregator. Jupiter routes some swap legs through DFlow, so a single Jupiter swap can
+     * land on-chain as two transactions — one via Jupiter v6, one via DFlow — and the DFlow leg
+     * must be recognized too or it renders as an unknown multi-transfer.
+     */
+    const val dflow = "DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH"
+
     /** All recognized program ids. */
-    val all: Set<String> = setOf(jupiterV6, lifi)
+    val all: Set<String> = setOf(jupiterV6, lifi, dflow)
 
     /**
      * The recognized subset of [candidates], deduplicated (first occurrence wins, order
