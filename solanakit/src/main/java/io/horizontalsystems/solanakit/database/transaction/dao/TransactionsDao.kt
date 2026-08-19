@@ -17,12 +17,16 @@ interface TransactionsDao {
     @Query("SELECT * FROM `Transaction` WHERE pending ORDER BY timestamp")
     fun pendingTransactions() : List<Transaction>
 
-    @Query("SELECT hash, programIds FROM `Transaction` WHERE hash IN (:hashes) AND programIds IS NOT NULL")
-    fun getProgramIds(hashes: List<String>): List<HashWithProgramIds>
+    // Immutable per-transaction tags to preserve across full-row rewrites (see
+    // TransactionStorage.backfillTags). A row qualifies if it carries EITHER tag, since a plain SPL
+    // send has no recognized programIds yet may have createdTokenAccount set.
+    @Query("SELECT hash, programIds, createdTokenAccount FROM `Transaction` WHERE hash IN (:hashes) AND (programIds IS NOT NULL OR createdTokenAccount IS NOT NULL)")
+    fun getStoredTags(hashes: List<String>): List<HashWithTags>
 
-    data class HashWithProgramIds(
+    data class HashWithTags(
         val hash: String,
-        val programIds: String
+        val programIds: String?,
+        val createdTokenAccount: Boolean?
     )
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

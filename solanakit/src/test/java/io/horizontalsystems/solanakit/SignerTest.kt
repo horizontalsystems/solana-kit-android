@@ -3,9 +3,11 @@ package io.horizontalsystems.solanakit
 import com.solana.vendor.TweetNaclFast
 import io.horizontalsystems.solanakit.transactions.RawTransactionParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.sol4k.Base58
+import org.sol4k.VersionedTransaction
 import java.util.Base64
 
 class SignerTest {
@@ -34,6 +36,32 @@ class SignerTest {
 
         assertEquals(64, signature.size)
         assertTrue("signature must verify against the signer's public key", verify(message, signature))
+    }
+
+    @Test
+    fun isTransactionMessage_detectsSerializedMessages() {
+        // The message bytes of a real transaction are exactly what signTransaction signs; feeding
+        // them to signMessage would forge a broadcastable transaction signature, so they must be
+        // detected (both legacy and v0).
+        val v0Message = VersionedTransaction.from(jupiterV0Tx).message.serialize()
+        val legacyMessage = VersionedTransaction.from(voteLegacyTx).message.serialize()
+
+        assertTrue(signer.isTransactionMessage(v0Message))
+        assertTrue(signer.isTransactionMessage(legacyMessage))
+    }
+
+    @Test
+    fun isTransactionMessage_ignoresGenuineMessages() {
+        assertFalse(signer.isTransactionMessage("Hello Solana".toByteArray()))
+        assertFalse(signer.isTransactionMessage("Sign in to Example\nNonce: 42".toByteArray()))
+        assertFalse(signer.isTransactionMessage(ByteArray(0)))
+        assertFalse(signer.isTransactionMessage(byteArrayOf(0, 1, 2, 3, 4, 5)))
+    }
+
+    @Test(expected = TransactionMessageSignRefusedException::class)
+    fun signMessage_refusesSerializedTransactionMessage() {
+        val message = VersionedTransaction.from(jupiterV0Tx).message.serialize()
+        signer.signMessage(message)
     }
 
     @Test

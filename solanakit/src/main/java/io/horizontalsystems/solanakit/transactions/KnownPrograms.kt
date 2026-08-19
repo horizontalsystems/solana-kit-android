@@ -28,6 +28,23 @@ object KnownPrograms {
     val all: Set<String> = setOf(jupiterV6, lifi, dflow)
 
     /**
+     * SPL Associated Token Account program. Not part of [all] — it is not a swap and must not be
+     * surfaced on `Transaction.programIds` — but its presence among a transaction's INVOKED programs
+     * means the transaction created a token account, paying ~0.002 SOL of rent. Used by
+     * [createsTokenAccount] to distinguish that rent from a genuine SOL transfer.
+     */
+    const val associatedTokenAccount = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+
+    /**
+     * Whether [invokedProgramIds] (INVOKED program ids, one per instruction — the same input as
+     * [recognized]) shows this transaction created an associated token account. Only top-level
+     * invocations are visible to callers, which covers wallet-built SPL sends that prepend a
+     * create-ATA instruction; an ATA created via CPI inside another program is not detected.
+     */
+    fun createsTokenAccount(invokedProgramIds: List<String>): Boolean =
+        invokedProgramIds.any { it == associatedTokenAccount }
+
+    /**
      * The recognized subset of [candidates], deduplicated (first occurrence wins, order
      * preserved) and space-joined for `Transaction.programIds`; null when none are recognized.
      * Deduplication matters because callers pass one candidate per INSTRUCTION — a program

@@ -26,10 +26,10 @@ class TransactionStorage(
         transactionsDao.pendingTransactions()
 
     fun updateTransactions(transactions: List<Transaction>) =
-        transactionsDao.updateTransactions(backfillProgramIds(transactions))
+        transactionsDao.updateTransactions(backfillTags(transactions))
 
     fun addTransactions(transactions: List<FullTransaction>) {
-        transactionsDao.insertTransactions(backfillProgramIds(transactions.map { it.transaction }))
+        transactionsDao.insertTransactions(backfillTags(transactions.map { it.transaction }))
 
         val fullTokenTransfers = transactions.map { it.tokenTransfers }.flatten()
         transactionsDao.insertTokenTransfers(fullTokenTransfers.map { it.tokenTransfer })
@@ -37,26 +37,29 @@ class TransactionStorage(
     }
 
     // Both write paths perform full-row rewrites (REPLACE on insert, all-columns UPDATE on
-    // update), so a writer that doesn't carry `programIds` would silently null an existing tag
-    // and un-label a classified swap. The tag is immutable once known — a transaction's invoked
-    // programs never change — so backfill it from the stored rows whenever incoming ones lack
-    // it. One batched SELECT over the missing hashes (restricted to rows that HAVE a tag), not
-    // a per-row lookup: history syncs funnel the whole batch through a single write.
-    private fun backfillProgramIds(transactions: List<Transaction>): List<Transaction> {
-        val missingHashes = transactions.mapNotNull { if (it.programIds == null) it.hash else null }
+    // update), so a writer that doesn't carry a tag would silently null a stored one — un-labelling
+    // a classified swap (`programIds`) or losing the token-account-rent flag (`createdTokenAccount`).
+    // Both tags are immutable once known — a transaction's invoked programs never change — so
+    // backfill each from the stored row whenever the incoming one lacks it. One batched SELECT over
+    // the missing hashes (restricted to rows that HAVE a tag), not a per-row lookup: history syncs
+    // funnel the whole batch through a single write.
+    private fun backfillTags(transactions: List<Transaction>): List<Transaction> {
+        val missingHashes = transactions.mapNotNull {
+            if (it.programIds == null || it.createdTokenAccount == null) it.hash else null
+        }
         if (missingHashes.isEmpty()) return transactions
 
         val stored = missingHashes.chunked(500)
-            .flatMap { transactionsDao.getProgramIds(it) }
-            .associate { it.hash to it.programIds }
+            .flatMap { transactionsDao.getStoredTags(it) }
+            .associateBy { it.hash }
         if (stored.isEmpty()) return transactions
 
         return transactions.map { transaction ->
-            if (transaction.programIds == null) {
-                stored[transaction.hash]?.let { transaction.copy(programIds = it) } ?: transaction
-            } else {
-                transaction
-            }
+            val storedTags = stored[transaction.hash] ?: return@map transaction
+            transaction.copy(
+                programIds = transaction.programIds ?: storedTags.programIds,
+                createdTokenAccount = transaction.createdTokenAccount ?: storedTags.createdTokenAccount
+            )
         }
     }
 
