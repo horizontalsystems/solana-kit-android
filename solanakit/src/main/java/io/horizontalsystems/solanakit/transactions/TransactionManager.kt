@@ -108,6 +108,9 @@ class TransactionManager(
                             // joining KnownPrograms); fall back to the stored value when the
                             // sync derived none.
                             programIds = syncedTxHeader.programIds ?: existingTxHeader.programIds,
+                            // Confirmed parse decides token-account rent; keep a pending/stored flag
+                            // only when the sync couldn't (null).
+                            createdTokenAccount = syncedTxHeader.createdTokenAccount ?: existingTxHeader.createdTokenAccount,
                         ),
                         tokenTransfers = syncedTx.tokenTransfers.ifEmpty {
                             for (tokenTransfer in existingTx.tokenTransfers) {

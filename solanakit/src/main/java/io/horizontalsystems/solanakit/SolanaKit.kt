@@ -264,7 +264,8 @@ class SolanaKit(
                 // static account keys), filtered to the recognized set — lets clients render
                 // e.g. a Jupiter interaction as a swap while it is still pending. Same
                 // instruction-based derivation as TransactionSyncer's.
-                programIds = KnownPrograms.recognized(parsed.invokedProgramIds)
+                programIds = KnownPrograms.recognized(parsed.invokedProgramIds),
+                createdTokenAccount = KnownPrograms.createsTokenAccount(parsed.invokedProgramIds)
             ),
             listOf()
         )
