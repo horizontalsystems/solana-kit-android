@@ -2,10 +2,9 @@ package io.horizontalsystems.solanakit.core
 
 import com.solana.api.Api
 import com.solana.core.PublicKey
-import com.solana.rxsolana.api.getBalance
+import io.horizontalsystems.solanakit.transactions.getBalance
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
-import kotlinx.coroutines.rx2.await
 
 interface IBalanceListener {
     fun onUpdateBalanceSyncState(value: SolanaKit.SyncState)
@@ -41,7 +40,7 @@ class BalanceManager(
         syncState = SolanaKit.SyncState.Syncing()
 
         try {
-            val balance = rpcClient.getBalance(publicKey).await()
+            val balance = rpcClient.getBalance(publicKey)
             handleBalance(balance)
         } catch (error: Throwable) {
             syncState = SolanaKit.SyncState.NotSynced(error)

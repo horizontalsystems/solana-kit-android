@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.rx2.await
 import kotlinx.coroutines.withContext
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -182,7 +181,7 @@ class TransactionManager(
             amount = amount,
             instructions = priorityFeeInstructions(),
             recentBlockHash = blockhash
-        ).await()
+        )
 
         val fullTransaction = FullTransaction(
             Transaction(
@@ -258,7 +257,7 @@ class TransactionManager(
                 allowUnfundedRecipient = true,
                 instructions = priorityFeeInstructions(),
                 recentBlockHash = classicBlockhash
-            ).await()
+            )
 
             transactionHash = classicResult.first
             base64Trx = classicResult.second
