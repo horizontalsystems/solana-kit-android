@@ -1,7 +1,7 @@
 package io.horizontalsystems.solanakit.noderpc
 
 import com.solana.api.Api
-import com.solana.rxsolana.api.getBlockHeight
+import io.horizontalsystems.solanakit.transactions.getBlockHeight
 import io.horizontalsystems.solanakit.SolanaKit
 import io.horizontalsystems.solanakit.database.main.MainStorage
 import io.horizontalsystems.solanakit.network.ConnectionManager
@@ -11,7 +11,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx2.await
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
@@ -92,7 +91,7 @@ class ApiSyncer(
 
     private suspend fun sync() {
         try {
-            val blockHeight = api.getBlockHeight().await()
+            val blockHeight = api.getBlockHeight()
             handleBlockHeight(blockHeight)
         } catch (error: CancellationException) {
             throw error

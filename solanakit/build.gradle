@@ -59,17 +59,17 @@ dependencies {
 
     implementation 'org.sol4k:sol4k:0.5.16'
 
-    implementation 'com.github.metaplex-foundation:metaplex-android:1.2.0'
-    implementation 'com.github.metaplex-foundation:SolanaKT:1.2'
+    implementation('com.github.metaplex-foundation:metaplex-android:1.2.0') {
+        exclude group: 'com.github.metaplex-foundation.SolanaKT', module: 'rxsolana'
+    }
+    implementation 'com.github.metaplex-foundation.SolanaKT:solana:1.2'
     implementation 'com.squareup.moshi:moshi-kotlin:1.14.0'
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.10'
     implementation 'com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.10'
 
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-    implementation 'com.squareup.retrofit2:adapter-rxjava2:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.squareup.retrofit2:converter-scalars:2.9.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-rx2:1.6.4'
     implementation 'com.google.code.gson:gson:2.10.1'
 
     implementation "androidx.room:room-runtime:$room_version"

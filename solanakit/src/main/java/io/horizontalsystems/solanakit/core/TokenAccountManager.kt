@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.rx2.await
 import java.math.BigDecimal
 
 interface ITokenAccountListener {
@@ -74,7 +73,7 @@ class TokenAccountManager(
 
         val publicKeys = tokenAccounts.map { PublicKey.valueOf(it.address) }
         try {
-            val result = rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java).await()
+            val result = rpcClient.getMultipleAccounts(publicKeys, AccountInfo::class.java)
             handleBalance(tokenAccounts, result, initialSync)
         } catch (error: Throwable) {
             syncState = SolanaKit.SyncState.NotSynced(error)

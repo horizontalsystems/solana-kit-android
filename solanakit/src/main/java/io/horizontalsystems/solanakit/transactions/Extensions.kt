@@ -4,11 +4,15 @@ import com.solana.actions.Action
 import com.solana.actions.findSPLTokenDestinationAddress
 import com.solana.actions.serializeAndSendWithFee
 import com.solana.api.Api
+import com.solana.api.getBalance
+import com.solana.api.getBlockHeight
+import com.solana.api.getConfirmedTransaction
 import com.solana.api.getMultipleAccounts
 import com.solana.core.Account
 import com.solana.core.PublicKey
 import com.solana.core.Transaction
 import com.solana.core.TransactionInstruction
+import com.solana.models.ConfirmedTransaction
 import com.solana.models.buffer.BufferInfo
 import com.solana.programs.AssociatedTokenProgram
 import com.solana.programs.SystemProgram
@@ -16,26 +20,46 @@ import com.solana.programs.TokenProgram
 import com.solana.vendor.ContResult
 import com.solana.vendor.ResultError
 import com.solana.vendor.flatMap
-import io.reactivex.Single
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.Base64
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-fun <T> Api.getMultipleAccounts(
+/**
+ * Bridges a SolanaKT callback-style API call (`(Result<T>) -> Unit`) to a suspending call.
+ */
+private suspend fun <T> awaitResult(block: ((Result<T>) -> Unit) -> Unit): T =
+    suspendCancellableCoroutine { continuation ->
+        block { result ->
+            if (!continuation.isActive) return@block
+            result
+                .onSuccess { continuation.resume(it) }
+                .onFailure { continuation.resumeWithException(it) }
+        }
+    }
+
+suspend fun Api.getBalance(account: PublicKey): Long =
+    awaitResult { getBalance(account, it) }
+
+suspend fun Api.getBlockHeight(): Long =
+    awaitResult { getBlockHeight(it) }
+
+suspend fun Api.getConfirmedTransaction(signature: String): ConfirmedTransaction =
+    awaitResult { getConfirmedTransaction(signature, it) }
+
+suspend fun <T> Api.getMultipleAccounts(
     accounts: List<PublicKey>,
     decodeTo: Class<T>
-): Single<List<BufferInfo<T>?>> = Single.create { emitter ->
-    getMultipleAccounts(accounts, decodeTo) { result ->
-        result.onSuccess { emitter.onSuccess(it) }
-        result.onFailure { emitter.onError(it) }
-    }
-}
+): List<BufferInfo<T>?> =
+    awaitResult { getMultipleAccounts(accounts, decodeTo, it) }
 
-fun Action.sendSOL(
+suspend fun Action.sendSOL(
     account: Account,
     destination: PublicKey,
     amount: Long,
     instructions: List<TransactionInstruction>,
     recentBlockHash: String
-) = Single.create { emitter ->
+): Pair<String, String> {
     val transferInstruction = SystemProgram.transfer(account.publicKey, destination, amount)
     val transaction = Transaction()
 
@@ -45,16 +69,13 @@ fun Action.sendSOL(
 
     transaction.add(transferInstruction)
 
-    this.serializeAndSendWithFee(transaction, listOf(account), recentBlockHash) { result ->
-        result.onSuccess {
-            emitter.onSuccess(Pair(it, encodeBase64(transaction)))
-        }.onFailure {
-            emitter.onError(it)
-        }
+    val signature = awaitResult<String> { callback ->
+        serializeAndSendWithFee(transaction, listOf(account), recentBlockHash, onComplete = callback)
     }
+    return Pair(signature, encodeBase64(transaction))
 }
 
-fun Action.sendSPLTokens(
+suspend fun Action.sendSPLTokens(
     mintAddress: PublicKey,
     fromPublicKey: PublicKey,
     destinationAddress: PublicKey,
@@ -63,7 +84,7 @@ fun Action.sendSPLTokens(
     account: Account,
     instructions: List<TransactionInstruction>,
     recentBlockHash: String
-) = Single.create { emitter ->
+): Pair<String, String> = suspendCancellableCoroutine { continuation ->
     ContResult { cb ->
         this.findSPLTokenDestinationAddress(
             mintAddress,
@@ -110,10 +131,11 @@ fun Action.sendSPLTokens(
             }
         }
     }.run { result ->
+        if (!continuation.isActive) return@run
         result.onSuccess {
-            emitter.onSuccess(it)
+            continuation.resume(it)
         }.onFailure {
-            emitter.onError(it)
+            continuation.resumeWithException(it)
         }
     }
 }
