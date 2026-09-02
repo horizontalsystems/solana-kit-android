@@ -11,11 +11,14 @@ import io.horizontalsystems.solanakit.models.FullTokenAccount
 import io.horizontalsystems.solanakit.models.MintAccount
 import io.horizontalsystems.solanakit.models.TokenAccount
 import io.horizontalsystems.solanakit.transactions.getMultipleAccounts
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import org.sol4k.Constants.TOKEN_PROGRAM_ID
 import java.math.BigDecimal
 
 interface ITokenAccountListener {
@@ -25,6 +28,7 @@ interface ITokenAccountListener {
 class TokenAccountManager(
     private val walletAddress: String,
     private val rpcClient: Api,
+    private val rpcUrl: String,
     private val storage: TransactionStorage,
     private val mainStorage: MainStorage
 ) {
@@ -104,12 +108,28 @@ class TokenAccountManager(
         initialSync: Boolean
     ) {
         val updatedTokenAccounts = mutableListOf<TokenAccount>()
+        val missingOnChain = mutableListOf<TokenAccount>()
 
         for ((index, tokenAccount) in tokenAccounts.withIndex()) {
-            tokenAccountsBufferInfo[index]?.let { account ->
+            val account = tokenAccountsBufferInfo[index]
+            if (account != null) {
                 val balance = account.data?.value?.lamports?.toBigDecimal() ?: tokenAccount.balance
                 updatedTokenAccounts.add(TokenAccount(tokenAccount.address, tokenAccount.mintAddress, balance, tokenAccount.decimals))
+            } else {
+                missingOnChain.add(tokenAccount)
             }
+        }
+
+        // A stored row that doesn't exist on-chain while ANOTHER account for the same mint does
+        // is a stale placeholder — e.g. an ATA derived with the legacy token program for a
+        // Token-2022 mint before the derivation was program-aware. Left in place it can shadow
+        // the real account in the by-mint balance lookup, showing a zero balance forever.
+        // A missing row whose mint has no on-chain account at all is kept: it's a legitimate
+        // not-yet-funded ATA awaiting its first transfer.
+        val mintsOnChain = updatedTokenAccounts.map { it.mintAddress }.toSet()
+        val staleAddresses = missingOnChain.filter { it.mintAddress in mintsOnChain }.map { it.address }
+        if (staleAddresses.isNotEmpty()) {
+            storage.deleteTokenAccounts(staleAddresses)
         }
 
         storage.saveTokenAccounts(updatedTokenAccounts)
@@ -131,7 +151,7 @@ class TokenAccountManager(
         _newTokenAccountsFlow.tryEmit(newFullTokenAccounts)
     }
 
-    fun addTokenAccount(walletAddress: String, mintAddress: String, decimals: Int) {
+    suspend fun addTokenAccount(walletAddress: String, mintAddress: String, decimals: Int) {
         if (!storage.tokenAccountExists(mintAddress)) {
             val userTokenMintAddress = associatedTokenAddress(walletAddress, mintAddress)
             val tokenAccount = TokenAccount(userTokenMintAddress, mintAddress, BigDecimal.ZERO, decimals)
@@ -141,14 +161,29 @@ class TokenAccountManager(
         }
     }
 
-    private fun associatedTokenAddress(
+    // The ATA PDA seeds include the mint's OWNING token program, so a Token-2022 mint (e.g.
+    // Pump.fun tokens) has a different associated address than the legacy derivation produces —
+    // deriving with the wrong program yields an address that never exists on-chain and a balance
+    // stuck at zero. Fetch the mint account's owner to seed the derivation with the right
+    // program. On RPC failure fall back to the legacy program (the vast majority of mints):
+    // if that guess is wrong for a Token-2022 mint, the stale row is deleted in handleBalance
+    // once the real account is observed on-chain.
+    private suspend fun associatedTokenAddress(
         walletAddress: String,
         tokenMintAddress: String
-    ): String {
-        return PublicKey.associatedTokenAddress(
-            walletAddress = PublicKey(walletAddress),
-            tokenMintAddress = PublicKey(tokenMintAddress)
-        ).address.toBase58()
+    ): String = withContext(Dispatchers.IO) {
+        val mint = org.sol4k.PublicKey(tokenMintAddress)
+        val tokenProgramId = try {
+            org.sol4k.Connection(rpcUrl).getAccountInfo(mint)?.owner ?: TOKEN_PROGRAM_ID
+        } catch (e: Throwable) {
+            TOKEN_PROGRAM_ID
+        }
+
+        org.sol4k.PublicKey.findProgramDerivedAddress(
+            org.sol4k.PublicKey(walletAddress),
+            mint,
+            tokenProgramId
+        ).publicKey.toBase58()
     }
 
 }

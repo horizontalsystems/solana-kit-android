@@ -13,7 +13,10 @@ import io.horizontalsystems.solanakit.models.TokenAccount
 @Dao
 interface TokenAccountDao {
 
-    @Query("SELECT * FROM TokenAccount WHERE mintAddress=:address LIMIT 1")
+    // Should duplicate rows for a mint ever coexist (e.g. a stale placeholder ATA alongside the
+    // real account), prefer the funded one instead of leaving the pick to SQLite's arbitrary row
+    // order. balance is stored as TEXT (BigDecimal converter), hence the CAST for numeric order.
+    @Query("SELECT * FROM TokenAccount WHERE mintAddress=:address ORDER BY CAST(balance AS REAL) DESC LIMIT 1")
     fun getByMintAddress(address: String): TokenAccount?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -22,7 +25,10 @@ interface TokenAccountDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(balance: List<TokenAccount>)
 
-    @Query("SELECT * FROM TokenAccount WHERE mintAddress=:mintAddress LIMIT 1")
+    @Query("DELETE FROM TokenAccount WHERE address IN (:addresses)")
+    fun delete(addresses: List<String>)
+
+    @Query("SELECT * FROM TokenAccount WHERE mintAddress=:mintAddress ORDER BY CAST(balance AS REAL) DESC LIMIT 1")
     fun get(mintAddress: String): TokenAccountWrapper?
 
     @Query("SELECT * FROM TokenAccount WHERE mintAddress IN (:mintAddresses)")
