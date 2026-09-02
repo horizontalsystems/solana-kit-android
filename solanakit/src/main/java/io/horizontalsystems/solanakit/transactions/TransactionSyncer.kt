@@ -265,6 +265,9 @@ class TransactionSyncer(
         val tokenAccounts = mutableSetOf<TokenAccount>()
         // mint -> (senderOwner, receiverOwner) among non-our entries, used to infer from/to
         val mintCounterparties = mutableMapOf<String, Pair<String?, String?>>()
+        // Every token account (any owner) touched by this transaction's token balances — used to
+        // recognize when a lamport-based counterparty is a token account rather than a wallet.
+        val tokenBalanceAccountKeys = mutableSetOf<String>()
 
         if (meta != null) {
             val postTokenBalances = meta.postTokenBalances ?: emptyList()
@@ -285,6 +288,11 @@ class TransactionSyncer(
                 val postAmount = postBalance?.uiTokenAmount?.amount?.toBigDecimalOrNull() ?: BigDecimal.ZERO
                 val preAmount = preBalance?.uiTokenAmount?.amount?.toBigDecimalOrNull() ?: BigDecimal.ZERO
                 val change = postAmount - preAmount
+
+                val accountIndex = postBalance?.accountIndex ?: preBalance?.accountIndex
+                if (accountIndex != null && accountIndex < accountKeys.size) {
+                    tokenBalanceAccountKeys.add(accountKeys[accountIndex])
+                }
 
                 if (owner != ourAddress) {
                     // Track counterparty for from/to inference: who decreased = sender, who increased = receiver
@@ -308,8 +316,7 @@ class TransactionSyncer(
                 tokenTransfers.add(FullTokenTransfer(tokenTransfer, placeholderMintAccount))
                 mintAddresses.add(mint)
 
-                val accountIndex = postBalance?.accountIndex ?: preBalance?.accountIndex ?: continue
-                if (accountIndex < accountKeys.size) {
+                if (accountIndex != null && accountIndex < accountKeys.size) {
                     tokenAccounts.add(TokenAccount(accountKeys[accountIndex], mint, BigDecimal.ZERO, decimals))
                 }
             }
@@ -324,6 +331,25 @@ class TransactionSyncer(
                 } else {
                     solFrom = ourAddress
                     solTo = counterparty?.second
+                }
+            }
+
+            // A lamport-based counterparty that is itself one of this transaction's token accounts
+            // is an implementation detail, not the wallet the user transacted with — typically the
+            // recipient's associated token account receiving rent for its own creation on a
+            // first-ever send. Swap it for the token transfer counterparty's OWNER when known.
+            if (tokenTransfers.isNotEmpty()) {
+                val primaryTransfer = tokenTransfers.first()
+                val counterparty = mintCounterparties[primaryTransfer.tokenTransfer.mintAddress]
+
+                val currentTo = solTo
+                if (!primaryTransfer.tokenTransfer.incoming && currentTo != null && currentTo in tokenBalanceAccountKeys) {
+                    counterparty?.second?.let { solTo = it }
+                }
+
+                val currentFrom = solFrom
+                if (primaryTransfer.tokenTransfer.incoming && currentFrom != null && currentFrom in tokenBalanceAccountKeys) {
+                    counterparty?.first?.let { solFrom = it }
                 }
             }
         }

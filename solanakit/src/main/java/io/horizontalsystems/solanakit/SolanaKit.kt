@@ -158,9 +158,15 @@ class SolanaKit(
     }
 
     fun addTokenAccount(mintAddress: String, decimals: Int) {
-        tokenAccountManager.addTokenAccount(receiveAddress, mintAddress, decimals)
+        // Deriving the associated token address needs an RPC round-trip (the mint's owning
+        // token program decides the PDA seeds), so run it off the caller's thread. Falls back
+        // to a one-off scope so an add before start() isn't lost.
+        val launchScope = scope?.takeIf { it.isActive } ?: CoroutineScope(Dispatchers.IO)
+        launchScope.launch {
+            tokenAccountManager.addTokenAccount(receiveAddress, mintAddress, decimals)
 
-        refresh()
+            refresh()
+        }
     }
 
     override fun onUpdateLastBlockHeight(lastBlockHeight: Long) {
@@ -354,7 +360,7 @@ class SolanaKit(
 
             val transactionDatabase = SolanaDatabaseManager.getTransactionDatabase(application, walletId)
             val transactionStorage = TransactionStorage(transactionDatabase, addressString)
-            val tokenAccountManager = TokenAccountManager(addressString, rpcApiClient, transactionStorage, mainStorage)
+            val tokenAccountManager = TokenAccountManager(addressString, rpcApiClient, rpcSource.url.toString(), transactionStorage, mainStorage)
             val transactionManager = TransactionManager(address, transactionStorage, rpcAction, tokenAccountManager, rpcSource.url.toString(), httpClient)
             val pendingTransactionSyncer = PendingTransactionSyncer(rpcApiClient, transactionStorage, transactionManager)
             val transactionSyncer = TransactionSyncer(

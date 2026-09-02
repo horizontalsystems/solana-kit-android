@@ -163,6 +163,10 @@ class TransactionStorage(
         tokenAccountDao.insert(tokenAccount)
     }
 
+    fun deleteTokenAccounts(addresses: List<String>) {
+        tokenAccountDao.delete(addresses)
+    }
+
     fun addMintAccount(mintAccount: MintAccount) {
         mintAccountDao.insert(mintAccount)
     }
