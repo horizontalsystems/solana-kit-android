@@ -1,6 +1,8 @@
 package io.horizontalsystems.solanakit.transactions
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +26,24 @@ class KnownProgramsTest {
     @Test
     fun `createsTokenAccount is false for no instructions`() {
         assertFalse(KnownPrograms.createsTokenAccount(emptyList()))
+    }
+
+    @Test
+    fun `recognized surfaces 1inch Fusion for an order-create transaction`() {
+        val computeBudget = "ComputeBudget111111111111111111111111111111"
+        val invoked = listOf(computeBudget, computeBudget, KnownPrograms.oneInchFusion)
+        assertEquals(KnownPrograms.oneInchFusion, KnownPrograms.recognized(invoked))
+    }
+
+    @Test
+    fun `recognized keeps every recognized program in instruction order without duplicates`() {
+        val invoked = listOf(systemProgram, KnownPrograms.jupiterV6, tokenProgram, KnownPrograms.oneInchFusion, KnownPrograms.jupiterV6)
+        assertEquals("${KnownPrograms.jupiterV6} ${KnownPrograms.oneInchFusion}", KnownPrograms.recognized(invoked))
+    }
+
+    @Test
+    fun `recognized is null for a plain transfer`() {
+        assertNull(KnownPrograms.recognized(listOf(systemProgram, tokenProgram)))
     }
 
     @Test
