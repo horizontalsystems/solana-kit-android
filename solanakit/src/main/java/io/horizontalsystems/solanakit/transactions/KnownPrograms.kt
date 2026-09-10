@@ -24,8 +24,17 @@ object KnownPrograms {
      */
     const val dflow = "DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH"
 
+    /**
+     * 1inch Fusion Swap. A Fusion swap is an intent: the wallet signs an order-create transaction
+     * (only this program is invoked; the sold token moves into escrow) and a resolver later fills
+     * it in a second transaction (this program plus whatever it routes through, e.g. Jupiter),
+     * delivering the bought token. Both must be recognized, or the order-create renders as an
+     * unknown multi-transfer.
+     */
+    const val oneInchFusion = "HNarfxC3kYMMhFkxUFeYb8wHVdPzY5t9pupqW5fL2meM"
+
     /** All recognized program ids. */
-    val all: Set<String> = setOf(jupiterV6, lifi, dflow)
+    val all: Set<String> = setOf(jupiterV6, lifi, dflow, oneInchFusion)
 
     /**
      * SPL Associated Token Account program. Not part of [all] — it is not a swap and must not be
