@@ -110,6 +110,10 @@ class TransactionManager(
                             // Confirmed parse decides token-account rent; keep a pending/stored flag
                             // only when the sync couldn't (null).
                             createdTokenAccount = syncedTxHeader.createdTokenAccount ?: existingTxHeader.createdTokenAccount,
+                            // Same rule as programIds: the confirmed parse wins, the stored pair
+                            // (from the raw send-time parse) fills in when it derived none.
+                            swapSrcMint = syncedTxHeader.swapSrcMint ?: existingTxHeader.swapSrcMint,
+                            swapDstMint = syncedTxHeader.swapDstMint ?: existingTxHeader.swapDstMint,
                         ),
                         tokenTransfers = syncedTx.tokenTransfers.ifEmpty {
                             for (tokenTransfer in existingTx.tokenTransfers) {

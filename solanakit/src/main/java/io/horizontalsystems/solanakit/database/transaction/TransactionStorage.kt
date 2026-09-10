@@ -2,6 +2,7 @@ package io.horizontalsystems.solanakit.database.transaction
 
 import androidx.sqlite.db.SimpleSQLiteQuery
 import io.horizontalsystems.solanakit.models.*
+import io.horizontalsystems.solanakit.transactions.KnownPrograms
 
 class TransactionStorage(
     database: TransactionDatabase,
@@ -38,14 +39,15 @@ class TransactionStorage(
 
     // Both write paths perform full-row rewrites (REPLACE on insert, all-columns UPDATE on
     // update), so a writer that doesn't carry a tag would silently null a stored one — un-labelling
-    // a classified swap (`programIds`) or losing the token-account-rent flag (`createdTokenAccount`).
-    // Both tags are immutable once known — a transaction's invoked programs never change — so
-    // backfill each from the stored row whenever the incoming one lacks it. One batched SELECT over
+    // a classified swap (`programIds`), losing the token-account-rent flag (`createdTokenAccount`)
+    // or the swap pair (`swapSrcMint`/`swapDstMint`). All tags are immutable once known — a
+    // transaction's invoked programs never change — so backfill each from the stored row whenever
+    // the incoming one lacks it. One batched SELECT over
     // the missing hashes (restricted to rows that HAVE a tag), not a per-row lookup: history syncs
     // funnel the whole batch through a single write.
     private fun backfillTags(transactions: List<Transaction>): List<Transaction> {
         val missingHashes = transactions.mapNotNull {
-            if (it.programIds == null || it.createdTokenAccount == null) it.hash else null
+            if (it.programIds == null || it.createdTokenAccount == null || it.lacksSwapPair()) it.hash else null
         }
         if (missingHashes.isEmpty()) return transactions
 
@@ -58,10 +60,17 @@ class TransactionStorage(
             val storedTags = stored[transaction.hash] ?: return@map transaction
             transaction.copy(
                 programIds = transaction.programIds ?: storedTags.programIds,
-                createdTokenAccount = transaction.createdTokenAccount ?: storedTags.createdTokenAccount
+                createdTokenAccount = transaction.createdTokenAccount ?: storedTags.createdTokenAccount,
+                swapSrcMint = transaction.swapSrcMint ?: storedTags.swapSrcMint,
+                swapDstMint = transaction.swapDstMint ?: storedTags.swapDstMint
             )
         }
     }
+
+    // Only a Fusion transaction can carry a pair, so a null pair is "missing" only there; on every
+    // other transaction null is the expected value and must not trigger a lookup.
+    private fun Transaction.lacksSwapPair(): Boolean =
+        programIds?.split(" ")?.contains(KnownPrograms.oneInchFusion) == true && (swapSrcMint == null || swapDstMint == null)
 
     suspend fun getTransactions(incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> {
         val condition = incoming?.let {

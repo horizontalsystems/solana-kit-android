@@ -18,15 +18,18 @@ interface TransactionsDao {
     fun pendingTransactions() : List<Transaction>
 
     // Immutable per-transaction tags to preserve across full-row rewrites (see
-    // TransactionStorage.backfillTags). A row qualifies if it carries EITHER tag, since a plain SPL
-    // send has no recognized programIds yet may have createdTokenAccount set.
-    @Query("SELECT hash, programIds, createdTokenAccount FROM `Transaction` WHERE hash IN (:hashes) AND (programIds IS NOT NULL OR createdTokenAccount IS NOT NULL)")
+    // TransactionStorage.backfillTags). A row qualifies if it carries ANY tag, since a plain SPL
+    // send has no recognized programIds yet may have createdTokenAccount set. The swap pair is
+    // only ever set alongside programIds, so it needs no clause of its own.
+    @Query("SELECT hash, programIds, createdTokenAccount, swapSrcMint, swapDstMint FROM `Transaction` WHERE hash IN (:hashes) AND (programIds IS NOT NULL OR createdTokenAccount IS NOT NULL)")
     fun getStoredTags(hashes: List<String>): List<HashWithTags>
 
     data class HashWithTags(
         val hash: String,
         val programIds: String?,
-        val createdTokenAccount: Boolean?
+        val createdTokenAccount: Boolean?,
+        val swapSrcMint: String?,
+        val swapDstMint: String?
     )
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
