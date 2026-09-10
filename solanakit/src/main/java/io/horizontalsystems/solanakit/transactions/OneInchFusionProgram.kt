@@ -59,5 +59,5 @@ internal object OneInchFusionProgram {
             .copyOfRange(0, 8)
             .toHex()
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 }

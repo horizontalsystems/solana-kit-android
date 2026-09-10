@@ -2,6 +2,7 @@ package io.horizontalsystems.solanakit.database.transaction
 
 import androidx.sqlite.db.SimpleSQLiteQuery
 import io.horizontalsystems.solanakit.models.*
+import io.horizontalsystems.solanakit.transactions.KnownPrograms
 
 class TransactionStorage(
     database: TransactionDatabase,
@@ -46,7 +47,7 @@ class TransactionStorage(
     // funnel the whole batch through a single write.
     private fun backfillTags(transactions: List<Transaction>): List<Transaction> {
         val missingHashes = transactions.mapNotNull {
-            if (it.programIds == null || it.createdTokenAccount == null || it.swapSrcMint == null) it.hash else null
+            if (it.programIds == null || it.createdTokenAccount == null || it.lacksSwapPair()) it.hash else null
         }
         if (missingHashes.isEmpty()) return transactions
 
@@ -65,6 +66,11 @@ class TransactionStorage(
             )
         }
     }
+
+    // Only a Fusion transaction can carry a pair, so a null pair is "missing" only there; on every
+    // other transaction null is the expected value and must not trigger a lookup.
+    private fun Transaction.lacksSwapPair(): Boolean =
+        programIds?.contains(KnownPrograms.oneInchFusion) == true && (swapSrcMint == null || swapDstMint == null)
 
     suspend fun getTransactions(incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> {
         val condition = incoming?.let {
