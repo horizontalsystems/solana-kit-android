@@ -21,7 +21,7 @@ import io.horizontalsystems.solanakit.models.*
         Transaction::class,
         TokenAccount::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -48,12 +48,22 @@ abstract class TransactionDatabase : RoomDatabase() {
             }
         }
 
+        // Existing rows stay NULL ("no pair known"); a Fusion row synced before this was tracked is
+        // re-tagged the next time its confirmed record is fetched (TransactionManager keeps the
+        // freshly derived value).
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `Transaction` ADD COLUMN `swapSrcMint` TEXT")
+                db.execSQL("ALTER TABLE `Transaction` ADD COLUMN `swapDstMint` TEXT")
+            }
+        }
+
         fun getInstance(context: Context, databaseName: String): TransactionDatabase {
             return Room.databaseBuilder(context, TransactionDatabase::class.java, databaseName)
 //                .setQueryCallback({ sqlQuery, bindArgs ->
 //                    println("SQL Query: $sqlQuery SQL Args: $bindArgs")
 //                }, Executors.newSingleThreadExecutor())
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .fallbackToDestructiveMigration()
                 .allowMainThreadQueries()
                 .build()

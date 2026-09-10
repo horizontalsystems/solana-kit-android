@@ -28,5 +28,14 @@ data class Transaction(
     // rent apart from a genuine small SOL transfer riding along an SPL transfer. TRUE/FALSE are
     // derived at parse time; NULL means "unknown" — a row stored before this was tracked — for
     // which clients should fall back to an amount heuristic rather than assume no account was made.
-    val createdTokenAccount: Boolean? = null
+    val createdTokenAccount: Boolean? = null,
+    // The swapped pair as NAMED by the swap program's instruction (currently 1inch Fusion, whose
+    // `create`/`fill` account lists carry `src_mint`/`dst_mint` — see OneInchFusionProgram), as
+    // opposed to what this transaction's balance changes show. They differ for a Fusion swap: it is
+    // split across an order-create and a later fill, so each transaction moves only ONE side of the
+    // pair, and these let a client name the other side (e.g. draw its icon). Native SOL appears as
+    // the wrapped-SOL mint. Null when no recognized program named a pair (Jupiter and LI.FI move
+    // both sides in one transaction, so their pair is visible from the transfers).
+    val swapSrcMint: String? = null,
+    val swapDstMint: String? = null
 )

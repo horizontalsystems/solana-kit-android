@@ -6,9 +6,12 @@ import org.sol4k.Base58
  * Minimal reader of a serialized Solana transaction (legacy or V0), extracting only what
  * `SolanaKit.sendRawTransaction` needs and sol4k does not expose publicly (its
  * `TransactionMessage.accounts`/`instructions` are internal): the signature count, the embedded
- * blockhash, and the program id INVOKED by each top-level instruction. Program ids are always
- * static account keys (the runtime forbids loading programs from lookup tables), so V0 lookup
- * tables — everything after the instruction list — never need to be parsed.
+ * blockhash, and each top-level instruction — the program id it INVOKES, its accounts and its
+ * data. Program ids are always static account keys (the runtime forbids loading programs from
+ * lookup tables), so V0 lookup tables — everything after the instruction list — never need to be
+ * parsed; an instruction ACCOUNT that lives in a lookup table (index past the static keys) cannot
+ * be resolved offline, and such an instruction is left out of [ParsedTransaction.instructions]
+ * (its program id is still reported).
  */
 internal object RawTransactionParser {
 
@@ -19,6 +22,8 @@ internal object RawTransactionParser {
         val recentBlockhash: String,
         /** Base58 program id invoked by each top-level instruction, in order. */
         val invokedProgramIds: List<String>,
+        /** Top-level instructions whose accounts are all static keys (see class doc), in order. */
+        val instructions: List<InvokedInstruction>,
     )
 
     fun parse(rawTransaction: ByteArray): ParsedTransaction {
@@ -61,18 +66,22 @@ internal object RawTransactionParser {
 
         val instructionCount = readLength()
         val invokedProgramIds = mutableListOf<String>()
+        val instructions = mutableListOf<InvokedInstruction>()
         repeat(instructionCount) {
             val programIdIndex = readByte()
             val instructionAccountCount = readLength()
-            offset += instructionAccountCount
+            val accountIndexes = List(instructionAccountCount) { readByte() }
             val dataLength = readLength()
+            val data = rawTransaction.copyOfRange(offset, offset + dataLength)
             offset += dataLength
 
-            accountKeys.getOrNull(programIdIndex)?.let {
-                invokedProgramIds.add(Base58.encode(it))
-            }
+            val programId = accountKeys.getOrNull(programIdIndex)?.let { Base58.encode(it) } ?: return@repeat
+            invokedProgramIds.add(programId)
+
+            val accounts = accountIndexes.map { accountKeys.getOrNull(it) ?: return@repeat }
+            instructions.add(InvokedInstruction(programId, accounts.map { Base58.encode(it) }, data))
         }
 
-        return ParsedTransaction(signatureCount, requiredSignatures, recentBlockhash, invokedProgramIds)
+        return ParsedTransaction(signatureCount, requiredSignatures, recentBlockhash, invokedProgramIds, instructions)
     }
 }

@@ -29,6 +29,7 @@ import io.horizontalsystems.solanakit.noderpc.endpoints.getSignaturesForAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import org.sol4k.Base58
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -361,7 +362,9 @@ class TransactionSyncer(
         // merely reference a program (e.g. the wallet receiving the tail of someone else's Jupiter
         // swap) and, with jsonParsed, lookup-table-loaded addresses. Matches the send-path
         // derivation in SolanaKit.sendRawTransaction.
-        val invokedProgramIds = response.transaction?.message?.instructions?.mapNotNull { it.programId } ?: emptyList()
+        val instructions = response.transaction?.message?.instructions ?: emptyList()
+        val invokedProgramIds = instructions.mapNotNull { it.programId }
+        val swapMints = OneInchFusionProgram.swapMints(instructions.mapNotNull { it.invokedInstruction() })
 
         val transaction = Transaction(
             hash = signature,
@@ -373,7 +376,9 @@ class TransactionSyncer(
             error = error,
             pending = false,
             programIds = KnownPrograms.recognized(invokedProgramIds),
-            createdTokenAccount = KnownPrograms.createsTokenAccount(invokedProgramIds)
+            createdTokenAccount = KnownPrograms.createsTokenAccount(invokedProgramIds),
+            swapSrcMint = swapMints?.srcMint,
+            swapDstMint = swapMints?.dstMint
         )
 
         return ParsedTransaction(
@@ -530,4 +535,18 @@ class TransactionSyncer(
             .build()
     }
 
+}
+
+// Only `partiallyDecoded` instructions carry accounts and data (see InstructionInfo); a `parsed`
+// one, or malformed base58 data, yields null and is simply not a candidate for pair decoding.
+private fun InstructionInfo.invokedInstruction(): InvokedInstruction? {
+    val programId = programId ?: return null
+    val accounts = accounts ?: return null
+    val data = data ?: return null
+    val decoded = try {
+        Base58.decode(data)
+    } catch (e: Exception) {
+        return null
+    }
+    return InvokedInstruction(programId, accounts, decoded)
 }

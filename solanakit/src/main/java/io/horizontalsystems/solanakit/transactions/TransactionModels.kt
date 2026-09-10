@@ -47,11 +47,15 @@ data class TransactionMessage(
 )
 
 // A top-level instruction in a transaction message (jsonParsed format). Both jsonParsed
-// shapes (`parsed` and `partiallyDecoded`) carry the invoked `programId` directly; the
-// remaining fields differ per shape and are not needed here, so only `programId` is decoded.
+// shapes carry the invoked `programId` directly. `accounts` (base58 pubkeys, in the program's
+// declared order) and `data` (base58 payload) are present only on the `partiallyDecoded` shape —
+// programs the RPC has no parser for, which includes the swap programs whose instructions name
+// the swapped pair (see OneInchFusionProgram); `parsed` instructions leave them null.
 @JsonClass(generateAdapter = true)
 data class InstructionInfo(
-    val programId: String?
+    val programId: String?,
+    val accounts: List<String>? = null,
+    val data: String? = null
 )
 
 @JsonClass(generateAdapter = true)

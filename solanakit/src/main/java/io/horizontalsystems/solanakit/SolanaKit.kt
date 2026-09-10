@@ -29,6 +29,7 @@ import io.horizontalsystems.solanakit.noderpc.ApiSyncer
 import io.horizontalsystems.solanakit.noderpc.NftClient
 import io.horizontalsystems.solanakit.transactions.JupiterApiService
 import io.horizontalsystems.solanakit.transactions.KnownPrograms
+import io.horizontalsystems.solanakit.transactions.OneInchFusionProgram
 import io.horizontalsystems.solanakit.transactions.PendingTransactionSyncer
 import io.horizontalsystems.solanakit.transactions.RawTransactionParser
 import io.horizontalsystems.solanakit.transactions.TransactionManager
@@ -253,6 +254,7 @@ class SolanaKit(
         // post-broadcast, on the co-signed path — a transient RPC failure must not abort a send
         // whose embedded blockhash is still valid.
         val blockhashInfo = refreshedBlockhash ?: connection.getLatestBlockhashExtended(Commitment.FINALIZED)
+        val swapMints = OneInchFusionProgram.swapMints(parsed.instructions)
 
         val fullTransaction = FullTransaction(
             transaction = Transaction(
@@ -271,7 +273,11 @@ class SolanaKit(
                 // e.g. a Jupiter interaction as a swap while it is still pending. Same
                 // instruction-based derivation as TransactionSyncer's.
                 programIds = KnownPrograms.recognized(parsed.invokedProgramIds),
-                createdTokenAccount = KnownPrograms.createsTokenAccount(parsed.invokedProgramIds)
+                createdTokenAccount = KnownPrograms.createsTokenAccount(parsed.invokedProgramIds),
+                // A Fusion order-create names the pair it will swap, so the pending row can
+                // already show the bought token (its transfer only lands in the resolver's fill).
+                swapSrcMint = swapMints?.srcMint,
+                swapDstMint = swapMints?.dstMint
             ),
             listOf()
         )
