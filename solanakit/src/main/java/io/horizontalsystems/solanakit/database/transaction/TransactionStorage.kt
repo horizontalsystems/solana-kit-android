@@ -70,7 +70,7 @@ class TransactionStorage(
     // Only a Fusion transaction can carry a pair, so a null pair is "missing" only there; on every
     // other transaction null is the expected value and must not trigger a lookup.
     private fun Transaction.lacksSwapPair(): Boolean =
-        programIds?.contains(KnownPrograms.oneInchFusion) == true && (swapSrcMint == null || swapDstMint == null)
+        programIds?.split(" ")?.contains(KnownPrograms.oneInchFusion) == true && (swapSrcMint == null || swapDstMint == null)
 
     suspend fun getTransactions(incoming: Boolean?, fromHash: String?, limit: Int?): List<FullTransaction> {
         val condition = incoming?.let {
